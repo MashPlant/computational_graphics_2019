@@ -1,0 +1,3 @@
+[submodule "ray_tracer"]
+	path = ray_tracer
+	url = https://github.com/MashPlant/ray_tracer
