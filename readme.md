@@ -41,9 +41,9 @@ GPU并行加速(5')（**OpenMP不算**）
 
 ### result
 
-巨大的一张图(一方面是尺寸大，一方面是我用的png生成工具太简易了，同等尺寸比别人也大一些)，流量慎入
+放一个jpg的图像，小不少，为大家节约流量
 
-![](./ray_tracer/report/finalr.png)
+![](./finalr.jpg)
 
 ## project2: mesh simplification
 
