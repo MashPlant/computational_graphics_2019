@@ -41,9 +41,11 @@ GPU并行加速(5')（**OpenMP不算**）
 
 ### result
 
-放一个jpg的图像，小不少，为大家节约流量
+放几个jpg的图像，小不少，为大家节约流量
 
-![](./finalr.jpg)
+![](./ray_tracer/readme_pic/finalr.jpg)
+
+![](./ray_tracer/readme_pic/heart_dispersion1.jpg)
 
 ## project2: mesh simplification
 

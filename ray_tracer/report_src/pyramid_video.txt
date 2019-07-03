@@ -1,0 +1,306 @@
+//  let world = World {
+//    objs: vec![
+//      Object {
+//        geo: Geo::Mesh(load::mesh("tmp/dragon.obj", Mat44::shift(3.0, 0.0, 5.0) * Mat44::scale(3.0, 3.0, 3.0)).unwrap()),
+//        color: Color::RGB(Vec3(1.0, 1.0, 1.0)),
+//        texture: Texture::Refractive,
+//      },
+//      Object {
+//        geo: Geo::Mesh(load::mesh("tmp/dragon.obj", Mat44::shift(7.0, 0.0, 10.0) * Mat44::scale(3.0, 3.0, 3.0)).unwrap()),
+//        color: Color::RGB(Vec3(1.0, 1.0, 1.0)),
+//        texture: Texture::Refractive,
+//      }],
+//    light: LightSource {
+//      geo: LightGeo::Circle(Circle::new(Vec3(5.0, 8.5 - 0.02, 5.0), Vec3(0.0, 1.0, 0.0), 1.75)),
+//      emission: Vec3(15.0, 15.0, 15.0),
+//    },
+//    env: Vec3::zero(),
+//    cam: Ray::new(Vec3(5.0, 5.2, 29.56), Vec3(0.0, -0.042612, -1.0)),
+//    w: 1024,
+//    h: 1024,
+//  };
+//  CodegenBase::new(CppCodegen).gen(&world, "_");
+//  let mut world = World {
+//    objs: vec![
+//      Object { // left
+//        geo: Geo::InfPlane(InfPlane::new(Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0))),
+//        color: Color::RGB(Vec3(0.75, 0.25, 0.25)),
+//        texture: Texture::Diffuse,
+//      },
+//      Object { // right
+//        geo: Geo::InfPlane(InfPlane::new(Vec3(10.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0))),
+//        color: Color::RGB(Vec3(0.25, 0.25, 0.75)),
+//        texture: Texture::Diffuse,
+//      },
+//      Object { // back
+//        geo: Geo::InfPlane(InfPlane::new(Vec3(0.0, 0.0, 0.0), Vec3(0.0, 0.0, 1.0))),
+//        color: Color::RGB(Vec3(0.75, 0.75, 0.75)),
+//        texture: Texture::Diffuse,
+//      },
+//      Object { // front
+//        geo: Geo::InfPlane(InfPlane::new(Vec3(0.0, 0.0, 20.0), Vec3(0.0, 0.0, 1.0))),
+//        color: Color::RGB(Vec3(0.75, 0.75, 0.75)),
+//        texture: Texture::Diffuse,
+//      },
+//      Object { // bottom
+//        geo: Geo::InfPlane(InfPlane::new(Vec3(0.0, 0.0, 0.0), Vec3(0.0, 1.0, 0.0))),
+//        color: Color::RGB(Vec3(0.75, 0.75, 0.75)),
+//        texture: Texture::Diffuse,
+//      },
+//      Object { // top
+//        geo: Geo::InfPlane(InfPlane::new(Vec3(0.0, 8.5, 0.0), Vec3(0.0, 1.0, 0.0))),
+//        color: Color::RGB(Vec3(0.75, 0.75, 0.75)),
+//        texture: Texture::Diffuse,
+//      },
+////      Object {
+////        geo: Geo::Sphere(Sphere { c: Vec3(2.70, 1.65, 4.70), r: 1.65 }),
+////        color: Color::RGB(Vec3(0.999, 0.999, 0.999)),
+////        texture: Texture::Specular,
+////      },
+////      Object {
+////        geo: Geo::Sphere(Sphere { c: Vec3(7.30, 1.65, 7.8), r: 1.65 }),
+////        color: Color::RGB(Vec3(0.999, 0.999, 0.999)),
+////        texture: Texture::Refractive,
+////      },
+//    ],
+//    light: LightSource {
+//      geo: LightGeo::Circle(Circle::new(Vec3(5.0, 8.5 - 0.02, 5.0), Vec3(0.0, 1.0, 0.0), 1.75)),
+//      emission: Vec3(15.0, 15.0, 15.0),
+//    },
+//    env: Vec3::zero(),
+//    cam: Ray::new(Vec3(5.0, 5.2, 29.56), Vec3(0.0, -0.042612, -1.0)),
+//    w: 1024,
+//    h: 1024,
+//  };
+//
+//  let mut pe = PhyEmulator::new(((0.0, 10.0), (0.0, 8.5), (0.0, 20.0)), Vec3(0.0, -0.5, 0.0), 0.0, 1e-3 / 60.0);
+////  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(3.0, 3.5, 5.0), r: 1.2 }, v: Vec3(1.5, 0.0, 0.0), m: 1.0 });
+////  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(7.0, 3.5, 5.0), r: 1.2 }, v: Vec3(-0.5, -1.0, 2.0), m: 1.0 });
+////  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(5.0, 2.5, 7.0), r: 1.2 }, v: Vec3(-1.0, 0.5, -1.0), m: 1.0 });
+////  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(5.0, 4.5, 4.0), r: 1.2 }, v: Vec3(0.0, 0.5, -1.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(2.300000, 0.910000, 2.300000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(2.300000, 0.910000, 4.100000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(2.300000, 0.910000, 5.900000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(2.300000, 0.910000, 7.700000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(4.100000, 0.910000, 2.300000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(4.100000, 0.910000, 4.100000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(4.100000, 0.910000, 5.900000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(4.100000, 0.910000, 7.700000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(5.900000, 0.910000, 2.300000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(5.900000, 0.910000, 4.100000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(5.900000, 0.910000, 5.900000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(5.900000, 0.910000, 7.700000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(7.700000, 0.910000, 2.300000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(7.700000, 0.910000, 4.100000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(7.700000, 0.910000, 5.900000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(7.700000, 0.910000, 7.700000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(3.200000, 2.182792, 3.200000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(3.200000, 2.182792, 5.000000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(3.200000, 2.182792, 6.800000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(5.000000, 2.182792, 3.200000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(5.000000, 2.182792, 5.000000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(5.000000, 2.182792, 6.800000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(6.800000, 2.182792, 3.200000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(6.800000, 2.182792, 5.000000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(6.800000, 2.182792, 6.800000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(4.100000, 3.455584, 4.100000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(4.100000, 3.455584, 5.900000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(5.900000, 3.455584, 4.100000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(5.900000, 3.455584, 5.900000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(5.000000, 4.728377, 5.000000), r: 0.900000 }, v: Vec3(0.0, 1.0, 0.0), m: 1.0 });
+//
+//  for frame in 0..1800 {
+//    println!("frame {}", frame);
+//    for _ in 0..1000 { pe.next(); }
+//    if frame <= 1504 {
+//      continue;
+//    }
+//    use std::process::Command;
+//    world.objs.truncate(6);
+////    world.objs.push(Object {
+////      geo: Geo::Sphere(pe.ss[0].s),
+////      color: Color::RGB(Vec3(0.999, 0.5, 0.5)),
+////      texture: Texture::Refractive,
+////    });
+////    world.objs.push(Object {
+////      geo: Geo::Sphere(pe.ss[1].s),
+////      color: Color::RGB(Vec3(0.5, 0.999, 0.5)),
+////      texture: Texture::Refractive,
+////    });
+////    world.objs.push(Object {
+////      geo: Geo::Sphere(pe.ss[2].s),
+////      color: Color::RGB(Vec3(0.5, 0.5, 0.999)),
+////      texture: Texture::Refractive,
+////    });
+////    world.objs.push(Object {
+////      geo: Geo::Sphere(pe.ss[3].s),
+////      color: Color::RGB(Vec3(0.999, 0.999, 0.999)),
+////      texture: Texture::Refractive,
+////    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[0].s),
+//      color: Color::RGB(Vec3(0.300000, 0.300000, 1.000000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[1].s),
+//      color: Color::RGB(Vec3(0.300000, 0.300000, 1.000000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[2].s),
+//      color: Color::RGB(Vec3(0.300000, 0.300000, 1.000000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[3].s),
+//      color: Color::RGB(Vec3(0.300000, 0.450980, 1.000000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[4].s),
+//      color: Color::RGB(Vec3(0.300000, 0.600000, 1.000000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[5].s),
+//      color: Color::RGB(Vec3(0.300000, 0.749020, 1.000000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[6].s),
+//      color: Color::RGB(Vec3(0.300000, 0.901961, 1.000000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[7].s),
+//      color: Color::RGB(Vec3(0.300000, 1.000000, 0.949020)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[8].s),
+//      color: Color::RGB(Vec3(0.300000, 1.000000, 0.800000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[9].s),
+//      color: Color::RGB(Vec3(0.300000, 1.000000, 0.647059)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[10].s),
+//      color: Color::RGB(Vec3(0.300000, 1.000000, 0.498039)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[11].s),
+//      color: Color::RGB(Vec3(0.300000, 1.000000, 0.349020)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[12].s),
+//      color: Color::RGB(Vec3(0.300000, 1.000000, 0.300000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[13].s),
+//      color: Color::RGB(Vec3(0.300000, 1.000000, 0.300000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[14].s),
+//      color: Color::RGB(Vec3(0.300000, 1.000000, 0.300000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[15].s),
+//      color: Color::RGB(Vec3(0.300000, 1.000000, 0.300000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[16].s),
+//      color: Color::RGB(Vec3(0.403922, 1.000000, 0.300000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[17].s),
+//      color: Color::RGB(Vec3(0.552941, 1.000000, 0.300000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[18].s),
+//      color: Color::RGB(Vec3(0.705882, 1.000000, 0.300000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[19].s),
+//      color: Color::RGB(Vec3(0.854902, 1.000000, 0.300000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[20].s),
+//      color: Color::RGB(Vec3(1.000000, 0.996078, 0.300000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[21].s),
+//      color: Color::RGB(Vec3(1.000000, 0.843137, 0.300000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[22].s),
+//      color: Color::RGB(Vec3(1.000000, 0.694118, 0.300000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[23].s),
+//      color: Color::RGB(Vec3(1.000000, 0.545098, 0.300000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[24].s),
+//      color: Color::RGB(Vec3(1.000000, 0.392157, 0.300000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[25].s),
+//      color: Color::RGB(Vec3(1.000000, 0.300000, 0.300000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[26].s),
+//      color: Color::RGB(Vec3(1.000000, 0.300000, 0.300000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[27].s),
+//      color: Color::RGB(Vec3(0.941176, 0.300000, 0.300000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[28].s),
+//      color: Color::RGB(Vec3(0.792157, 0.300000, 0.300000)),
+//      texture: Texture::Refractive,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[29].s),
+//      color: Color::RGB(Vec3(0.643137, 0.300000, 0.300000)),
+//      texture: Texture::Refractive,
+//    });
+//    CodegenBase::new(CudaCodegen::new()).gen(&world, "ray_tracer.cu");
+//    Command::new("nvcc").args(&["-O3", "--use_fast_math", "ray_tracer.cu"]).spawn().unwrap().wait();
+//    Command::new("./a.out").args(&["8192", &format!("image{:>04}.png", frame)]).spawn().unwrap().wait();
+////    let png = world.path_tracing(1000);
+////    let _ = png.write(&format!("image{:>02}.png", frame));
+//  }
+
+  // Object {
+  //   geo: Geo::Mesh(load::mesh("tmp/dragon.obj", Mat44::shift(3.0, 0.0, 5.0) * Mat44::scale(3.0, 3.0, 3.0)).unwrap()),
+  //   color: Color::RGB(Vec3(1.0, 1.0, 1.0)),
+  //   texture: Texture::Refractive,
+  // },
+  // Object {
+  //   geo: Geo::Mesh(load::mesh("tmp/dragon.obj", Mat44::shift(7.0, 0.0, 10.0) * Mat44::scale(3.0, 3.0, 3.0)).unwrap()),
+  //   color: Color::RGB(Vec3(1.0, 1.0, 1.0)),
+  //   texture: Texture::Refractive,
+  // },' 

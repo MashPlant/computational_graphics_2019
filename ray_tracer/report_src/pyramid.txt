@@ -1,0 +1,450 @@
+    {
+      Vec3 oc = Vec3{-2.300000, 0.900000, 8.700000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{-2.300000, 0.900000, 8.700000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.300000, 0.300000, 1.000000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{-2.300000, 0.900000, 10.500000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{-2.300000, 0.900000, 10.500000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.300000, 0.300000, 1.000000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{-2.300000, 0.900000, 12.300000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{-2.300000, 0.900000, 12.300000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.300000, 0.300000, 1.000000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{-2.300000, 0.900000, 14.100000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{-2.300000, 0.900000, 14.100000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.300000, 0.450980, 1.000000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{-0.500000, 0.900000, 8.700000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{-0.500000, 0.900000, 8.700000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.300000, 0.600000, 1.000000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{-0.500000, 0.900000, 10.500000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{-0.500000, 0.900000, 10.500000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.300000, 0.749020, 1.000000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{-0.500000, 0.900000, 12.300000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{-0.500000, 0.900000, 12.300000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.300000, 0.901961, 1.000000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{-0.500000, 0.900000, 14.100000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{-0.500000, 0.900000, 14.100000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.300000, 1.000000, 0.949020};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{1.300000, 0.900000, 8.700000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{1.300000, 0.900000, 8.700000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.300000, 1.000000, 0.800000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{1.300000, 0.900000, 10.500000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{1.300000, 0.900000, 10.500000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.300000, 1.000000, 0.647059};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{1.300000, 0.900000, 12.300000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{1.300000, 0.900000, 12.300000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.300000, 1.000000, 0.498039};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{1.300000, 0.900000, 14.100000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{1.300000, 0.900000, 14.100000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.300000, 1.000000, 0.349020};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{3.100000, 0.900000, 8.700000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{3.100000, 0.900000, 8.700000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.300000, 1.000000, 0.300000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{3.100000, 0.900000, 10.500000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{3.100000, 0.900000, 10.500000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.300000, 1.000000, 0.300000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{3.100000, 0.900000, 12.300000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{3.100000, 0.900000, 12.300000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.300000, 1.000000, 0.300000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{3.100000, 0.900000, 14.100000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{3.100000, 0.900000, 14.100000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.300000, 1.000000, 0.300000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{-1.400000, 2.172792, 9.600000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{-1.400000, 2.172792, 9.600000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.403922, 1.000000, 0.300000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{-1.400000, 2.172792, 11.400000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{-1.400000, 2.172792, 11.400000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.552941, 1.000000, 0.300000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{-1.400000, 2.172792, 13.200000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{-1.400000, 2.172792, 13.200000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.705882, 1.000000, 0.300000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{0.400000, 2.172792, 9.600000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{0.400000, 2.172792, 9.600000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.854902, 1.000000, 0.300000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{0.400000, 2.172792, 11.400000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{0.400000, 2.172792, 11.400000}).norm();
+          res.text = 2;
+          res.col = Vec3{1.000000, 0.996078, 0.300000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{0.400000, 2.172792, 13.200000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{0.400000, 2.172792, 13.200000}).norm();
+          res.text = 2;
+          res.col = Vec3{1.000000, 0.843137, 0.300000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{2.200000, 2.172792, 9.600000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{2.200000, 2.172792, 9.600000}).norm();
+          res.text = 2;
+          res.col = Vec3{1.000000, 0.694118, 0.300000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{2.200000, 2.172792, 11.400000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{2.200000, 2.172792, 11.400000}).norm();
+          res.text = 2;
+          res.col = Vec3{1.000000, 0.545098, 0.300000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{2.200000, 2.172792, 13.200000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{2.200000, 2.172792, 13.200000}).norm();
+          res.text = 2;
+          res.col = Vec3{1.000000, 0.392157, 0.300000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{-0.500000, 3.445584, 10.500000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{-0.500000, 3.445584, 10.500000}).norm();
+          res.text = 2;
+          res.col = Vec3{1.000000, 0.300000, 0.300000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{-0.500000, 3.445584, 12.300000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{-0.500000, 3.445584, 12.300000}).norm();
+          res.text = 2;
+          res.col = Vec3{1.000000, 0.300000, 0.300000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{1.300000, 3.445584, 10.500000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{1.300000, 3.445584, 10.500000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.941176, 0.300000, 0.300000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{1.300000, 3.445584, 12.300000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{1.300000, 3.445584, 12.300000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.792157, 0.300000, 0.300000};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{0.400000, 4.718377, 11.400000} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 0.900000 * 0.900000;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t and t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{0.400000, 4.718377, 11.400000}).norm();
+          res.text = 2;
+          res.col = Vec3{0.643137, 0.300000, 0.300000};
+        }
+      }
+    }

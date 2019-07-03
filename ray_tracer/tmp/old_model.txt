@@ -1,0 +1,2985 @@
+      Object {
+        geo: Geo::Sphere(Sphere { c: Vec3(2.70, 1.65, 4.70), r: 1.65 }),
+        color: Color::RGB(Vec3(0.999, 0.999, 0.999)),
+        texture: Texture::Specular,
+      },
+      Object {
+        geo: Geo::Sphere(Sphere { c: Vec3(7.30, 1.65, 7.8), r: 1.65 }),
+        color: Color::RGB(Vec3(0.999, 0.999, 0.999)),
+        texture: Texture::Refractive,
+      },
+
+//      Object { // metallic ball
+//        geo: Geo::Sphere(Sphere { c: Vec3(27.0, 50.0, 80.0), r: 12.0 }),
+//        texture: Texture::Specular { color: Vec3(1.0, 1.0, 1.0) },
+//      },
+//      Object { // glass ball
+//        geo: Geo::Sphere(Sphere { c: Vec3(50.0, 30.0, 30.0), r: 30.0 }),
+//        color: load::texture("result/earth.png").unwrap(),
+//        texture: Texture::Diffuse,
+//      },
+
+//Object {
+//  geo: Geo::Mesh(load::mesh("tmp/Ship.obj", Mat44::shift(50.0, 50.0, 30.0) *
+//    Mat44::rot_x_deg(30.0) * Mat44::rot_y_deg(165.0) *
+//    Mat44::scale(0.01, 0.01, 0.01)).unwrap()),
+//  color: Color::RGB(Vec3(0.5, 0.5, 0.5)),
+//  texture: Texture::Diffuse,
+//},
+//Object {
+//  geo: Geo::Mesh(load::mesh("tmp/Ship.obj", Mat44::shift(10.0, 50.0, 30.0) *
+//    Mat44::rot_x_deg(30.0) * Mat44::rot_y_deg(165.0) *
+//    Mat44::scale(0.01, 0.01, 0.01)).unwrap()),
+//  color: Color::RGB(Vec3(0.5, 0.5, 0.5)),
+//  texture: Texture::Diffuse,
+//},
+//Object {
+//  geo: Geo::Mesh(load::mesh("tmp/Ship.obj", Mat44::shift(80.0, 50.0, 30.0) *
+//    Mat44::rot_x_deg(30.0) * Mat44::rot_y_deg(165.0) *
+//    Mat44::scale(0.01, 0.01, 0.01)).unwrap()),
+//  color: Color::RGB(Vec3(0.5, 0.5, 0.5)),
+//  texture: Texture::Diffuse,
+//},
+      Object {
+        geo: Geo::Mesh(load::bezier_curve("result/water_drop.txt").unwrap().to_mesh(25, 25,
+                                                                              Mat44::shift(10.0, 17.4, 60.0) * Mat44::scale(80.0, 80.0, 80.0) * Mat44::rot_z_deg(-90.0))),
+//        geo: Geo::Mesh(load::mesh("tmp/dragon.obj", Mat44::shift(50.0, 0.0, 50.0) * Mat44::scale(40.0, 40.0, 40.0)).unwrap()),
+        color: Color::RGB(Vec3(1.0, 1.0, 1.0)),
+        texture: Texture::Specular,
+      },
+
+//    light: LightSource::new(LightGeo::Circle(Circle::new(Vec3(50.0, 50.0, 200.0), Vec3(0.0, 0.0, 1.0), 100.0)),
+//                            Vec3(0.0, 0.0, 0.0), 0),
+//    env: Vec3(0.6, 0.6, 0.8),
+
+
+
+
+struct OctNode {
+  Vec3 min, max;
+  union {
+    struct { // leaf, len = actual len | (1 << 31)
+      u32 len;
+      Vec3 pe[0]; // also store n & uv after pe
+    };
+    struct { // internal
+      u32 ch[8];
+    };
+  };
+};
+
+DEVICE inline void oct_node_hit(const OctNode *rt, const Ray &ray, HitRes &res, u32 text, const Vec3 &col) {
+  constexpr u8 PROB_SEQ[8][8] = {
+      {0, 1, 2, 4, 3, 5, 6, 7}, {1, 0, 3, 5, 2, 4, 7, 6},
+      {2, 0, 3, 6, 1, 4, 7, 5}, {3, 1, 2, 7, 0, 5, 6, 4},
+      {4, 0, 5, 6, 1, 2, 7, 3}, {5, 1, 4, 7, 0, 3, 6, 2},
+      {6, 2, 4, 7, 0, 3, 5, 1}, {7, 3, 5, 6, 1, 2, 4, 0},
+  };
+  const char *rt_b = (const char *)rt;
+  Vec3 inv_d{1.0f / ray.d.x, 1.0f / ray.d.y, 1.0f / ray.d.z};
+  u32 stk[56], top = 0;
+  stk[top++] = 0;
+  while (top){
+    const OctNode *x = (const OctNode *)(rt_b + stk[--top]);
+    while (true) {
+      if (x->len >> 31) { // leaf
+        u32 len = x->len & 0x7fffffff;
+        if (len == 0 || !BB_HIT_RAY(x->min, x->max, ray.o, inv_d)) { break; }
+        const Vec3 *pe = x->pe, *n = pe + len;
+        bool found = false;
+        for (u32 i = 0; i < len; i += 3) {
+          const Vec3 &p1 = pe[i], &e1 = pe[i + 1], &e2 = pe[i + 2];
+          Vec3 p = ray.d.cross(e2);
+          f32 det = e1.dot(p);
+          if (fabsf(det) < EPS) { continue; }
+          f32 inv_det = 1.0f / det;
+          Vec3 d = ray.o - p1;
+          f32 u = d.dot(p) * inv_det;
+          if (u < 0.0f || u > 1.0f) { continue; }
+          Vec3 q = d.cross(e1);
+          f32 v = ray.d.dot(q) * inv_det;
+          if (v < 0.0f || u + v > 1.0f) { continue; };
+          f32 t = e2.dot(q) * inv_det;
+          if (t > EPS) {
+            found = true;
+            if (t < res.t) {
+              res.t = t;
+              res.norm = n[i] * (1.0f - u - v) + n[i + 1] * u + n[i + 2] * v;
+              res.text = text;
+              res.col = col;
+            }
+          }
+        }
+        if (found) { return; }
+        break;
+      } else { // internal
+        if (!BB_HIT_RAY(x->min, x->max, ray.o, inv_d)) { break; }
+        Vec3 mid = (x->min + x->max) / 2.0f;
+        u32 index = (ray.o.x > mid.x) + ((ray.o.y > mid.y) << 1) + ((ray.o.z > mid.z) << 2);
+        stk[top++] = x->ch[PROB_SEQ[index][7]];
+        stk[top++] = x->ch[PROB_SEQ[index][6]];
+        stk[top++] = x->ch[PROB_SEQ[index][5]];
+        stk[top++] = x->ch[PROB_SEQ[index][4]];
+        stk[top++] = x->ch[PROB_SEQ[index][3]];
+        stk[top++] = x->ch[PROB_SEQ[index][2]];
+        stk[top++] = x->ch[PROB_SEQ[index][1]];
+        x = (const OctNode *)(rt_b + x->ch[PROB_SEQ[index][0]]);
+      }
+    }
+  }
+}
+
+
+//fn gen_mesh_obj(id: u32, mesh: &Mesh) {
+//  use crate::byteorder::*;
+//  use std::fs::{File, remove_file};
+//  use std::process::Command;
+//
+//  let bin_path = format!("mesh{}", id);
+//  {
+//    let mut bin = File::create(&bin_path).unwrap();
+//    let mut data = Vec::new();
+//    fn walk(node: &OctNode, f: &mut Vec<u8>, mesh: &Mesh) -> usize {
+//      let ret = f.len(); // offset of self
+//      macro_rules! write_vec {
+//          ($vec: expr) => { (f.write_f32::<LittleEndian>($vec.0), f.write_f32::<LittleEndian>($vec.1), f.write_f32::<LittleEndian>($vec.2)); };
+//        }
+//      write_vec!(node.aabb.min);
+//      write_vec!(node.aabb.max);
+//      match &node.kind {
+//        NodeKind::Internal(ch) => {
+//          for _ in 0..8 { f.write_u32::<LittleEndian>(0).unwrap(); }
+//          for (idx, ch) in ch.iter().enumerate() {
+//            let ch_off = walk(ch, f, mesh) as u32;
+//            let ch_ptr = &mut f[ret + 24 + idx * 4..ret + 24 + (idx + 1) * 4];
+//            ch_ptr[0] = (ch_off & 255) as u8;
+//            ch_ptr[1] = (ch_off >> 8 & 255) as u8;
+//            ch_ptr[2] = (ch_off >> 16 & 255) as u8;
+//            ch_ptr[3] = (ch_off >> 24 & 255) as u8;
+//          }
+//        }
+//        NodeKind::Leaf(idx) => {
+//          f.write_u32::<LittleEndian>((idx.len() * 3) as u32 | (1 << 31)).unwrap();
+//          for &(i, j, k) in idx.as_ref() {
+//            let (p1, p2, p3) = (mesh.v[i as usize], mesh.v[j as usize], mesh.v[k as usize]);
+//            let (e1, e2) = (p2 - p1, p3 - p1);
+//            write_vec!(p1);
+//            write_vec!(e1);
+//            write_vec!(e2);
+//          }
+//          for &(i, j, k) in idx.as_ref() {
+//            let (n1, n2, n3) = (mesh.norm[i as usize], mesh.norm[j as usize], mesh.norm[k as usize]);
+//            write_vec!(n1);
+//            write_vec!(n2);
+//            write_vec!(n3);
+//          }
+//        }
+//      }
+//      ret
+//    }
+//    walk(&mesh.tree, &mut data, mesh);
+//    bin.write_all(&data).unwrap();
+//  }
+//  Command::new("ld").args(&["-r", "-b", "binary", &bin_path, "-o", &format!("mesh{}.o", id)]).spawn().unwrap().wait().unwrap();
+//  remove_file(&bin_path).unwrap();
+//}
+
+fn gen_oct_node(this: &mut CodegenBase<Ch>, code: &mut String, node: &OctNode, mesh: &Mesh, impl_cnt: &mut u32) {
+    match &node.kind {
+      NodeKind::Internal(children) => {
+        let (mesh_id, impl_id) = (this.id, *impl_cnt);
+        *impl_cnt += 1;
+        this.wln_on(code, &format!("if (mesh{}impl{}(ray, inv_d, res)) {{ return true; }}", mesh_id, impl_id));
+        let ref mut code = String::new();
+        let indent = mem::replace(&mut this.indent, String::new());
+        this.wln_on(code, &format!("DEVICE bool mesh{}impl{}(const Ray &ray, const Vec3 &inv_d, HitRes &res) {{", mesh_id, impl_id)).inc();
+        this.wln_on(code, &format!("if (BB_HIT_RAY(({}), ({}), ray.o, inv_d)) {{",
+                                   cpp_vec3(node.aabb.min), cpp_vec3(node.aabb.max))).inc();
+        let mid = (node.aabb.min + node.aabb.max) / 2.0;
+        this.wln_on(code, &format!("u32 index = (ray.o.x > {}) + ((ray.o.y > {}) << 1) + ((ray.o.z > {}) << 2);", mid.0, mid.1, mid.2));
+        this.wln_on(code, "const static void *prob[8][8] = {").inc();
+        for i in 0..8 {
+          this.wln_on(code, &format!("{{&&_{}, &&_{}, &&_{}, &&_{}, &&_{}, &&_{}, &&_{}, &&_{}}},",
+                                     PROB[i][0], PROB[i][1], PROB[i][2], PROB[i][3], PROB[i][4], PROB[i][5], PROB[i][6], PROB[i][7]));
+        }
+        this.dec().wln_on(code, "};");
+        this.wln_on(code, "for (u32 i = 0; i < 8; ++i) {").inc();
+        this.wln_on(code, "goto *prob[index][i];");
+        for (i, child) in children.iter().enumerate() {
+          this.wln_on(code, &format!("_{}:", i));
+          Self::gen_oct_node(this, code, child, mesh, impl_cnt);
+          this.wln_on(code, "goto _;");
+        }
+        this.wln_on(code, "_:;");
+        this.dec().wln_on(code, "}").dec().wln_on(code, "}");
+        this.wln_on(code, "return false;");
+        this.dec().wln_on(code, "}");
+        this.impls.push(mem::replace(code, String::new()));
+        this.indent = indent;
+      }
+      NodeKind::Leaf(indices) => if !indices.is_empty() {
+        this.wln_on(code, &format!("if (BB_HIT_RAY(({}), ({}), ray.o, inv_d)) {{",
+                                   cpp_vec3(node.aabb.min), cpp_vec3(node.aabb.max))).inc();
+        let (mut pe, mut norm) = (String::new(), String::new());
+        for &(i, j, k) in indices.as_ref() {
+          let (p1, p2, p3) = (mesh.v[i as usize], mesh.v[j as usize], mesh.v[k as usize]);
+          let (n1, n2, n3) = (mesh.norm[i as usize], mesh.norm[j as usize], mesh.norm[k as usize]);
+          let (e1, e2) = (p2 - p1, p3 - p1);
+          pe += &format!("{}, {}, {}, ", cpp_vec3(p1), cpp_vec3(e1), cpp_vec3(e2));
+          norm += &format!("{}, {}, {}, ", cpp_vec3(n1), cpp_vec3(n2), cpp_vec3(n3));
+        }
+        this.wln_on(code, &format!("MESH_STORAGE Vec3 pe[] = {{{}}};", pe));
+        this.wln_on(code, &format!("MESH_STORAGE Vec3 norm[] = {{{}}};", norm));
+        let id = this.id;
+        this.wln_on(code, &format!("if (tri{}(pe, norm, {}, ray, res)) {{ return true; }}", id, 3 * indices.len()));
+        this.dec().wln_on(code, "}");
+      }
+    }
+  }
+
+  //    let id = this.id;
+  //    this.wln(&format!("DEVICE bool mesh{}(const Ray &, HitRes &);", id));
+  //    this.wln(&format!("mesh{}(ray, res);", id));
+  //    let ref mut code = String::new();
+  //    let indent = mem::replace(&mut this.indent, String::new());
+  //
+  //    this.wln_on(code, &format!("DEVICE bool tri{}(const Vec3 *pe, const Vec3 *norm, u32 n, const Ray &ray, HitRes &res) {{", id)).inc();
+  //    this.wln_on(code, "bool found = false;");
+  //    this.wln_on(code, "for (u32 i = 0; i < n; i += 3) {").inc();
+  //    this.wln_on(code, "const Vec3 &p1 = pe[i], &e1 = pe[i + 1], &e2 = pe[i + 2];");
+  //    this.wln_on(code, "Vec3 p = ray.d.cross(e2);");
+  //    this.wln_on(code, "f32 det = e1.dot(p);");
+  //    this.wln_on(code, "if (fabsf(det) < EPS) { continue; }");
+  //    this.wln_on(code, "f32 inv_det = 1.0f / det;");
+  //    this.wln_on(code, "Vec3 d = ray.o - p1;");
+  //    this.wln_on(code, "f32 u = d.dot(p) * inv_det;");
+  //    this.wln_on(code, "if (u < 0.0f || u > 1.0f) { continue; }");
+  //    this.wln_on(code, "Vec3 q = d.cross(e1);");
+  //    this.wln_on(code, "f32 v = ray.d.dot(q) * inv_det;");
+  //    this.wln_on(code, "if (v < 0.0f || u + v > 1.0f) { continue; };");
+  //    this.wln_on(code, "f32 t = e2.dot(q) * inv_det;");
+  //    this.wln_on(code, "if (t > EPS) {").inc();
+  //    this.wln_on(code, "found = true;");
+  //    this.wln_on(code, "if (t < res.t) {").inc();
+  //    this.wln_on(code, "res.t = t;");
+  //    this.wln_on(code, "res.norm = norm[i] * (1.0f - u - v) + norm[i + 1] * u + norm[i + 2] * v;");
+  //    this.wln_on(code, &format!("res.text = {};", obj.texture as u32));
+  //    match &obj.color {
+  //      &Color::RGB(rgb) => this.wln_on(code, &format!("res.col = {};", cpp_vec3(rgb))),
+  //      _ => unimplemented!(),
+  //    };
+  //    for _ in 0..3 {
+  //      this.dec().wln_on(code, "}");
+  //    }
+  //    this.wln_on(code, "return found;");
+  //    this.dec().wln_on(code, "}").wln_on(code, "");
+  //
+  //    this.impls.push(mem::replace(code, String::new()));
+  //    this.wln_on(code, &format!("DEVICE bool mesh{}(const Ray &ray, HitRes &res) {{", id)).inc();
+  //    this.wln_on(code, "Vec3 inv_d{1.0f / ray.d.x, 1.0f / ray.d.y, 1.0f / ray.d.z};");
+  //    Self::gen_oct_node(this, code, &mesh.tree, mesh, &mut 0);
+  //    this.wln_on(code, "return false;");
+  //    this.dec().wln_on(code, "}");
+  //    this.impls.push(mem::replace(code, String::new()));
+  //    this.indent = indent;
+  //    this.id += 1;
+  //  }
+
+
+
+  //  fn gen_mesh(this: &mut CodegenBase<CppCodegen>, mesh: &Mesh, obj: &Object) {
+//    fn check(x: &OctNode, cnt: &mut u32) {
+//      match &x.kind {
+//        NodeKind::Leaf(idx) => {
+//          if idx.len() > 16 {
+//            *cnt += 1;
+//          }
+//        }
+//        NodeKind::Internal(ch) => {
+//          for ch in ch.iter() {
+//            check(ch, cnt);
+//          }
+//        }
+//      }
+//    }
+//    let mut cnt = 0;
+//    check(&mesh.tree, &mut cnt);
+//    println!("{} node has more that 16 tri", cnt);
+//    let id = this.id;
+//    this.id += 1;
+//    this.wln(&format!("extern OctNode _binary_mesh{}_start;", id));
+//    this.wln(&format!("oct_node_hit(&_binary_mesh{}_start, ray, res, {}, {});", id, obj.texture as u32, match &obj.color {
+//      Color::RGB(rgb) => cpp_vec3(*rgb),
+//      _ => unimplemented!(),
+//    }));
+//    gen_mesh_obj(id, mesh);
+//  }
+
+//    fn depth(x: &KDNode) -> u32 {
+//      match &x.kind {
+//        KDNodeKind::Internal(ch, _sp, _sp_d) => {
+//          depth(&ch[0]).max(depth(&ch[1])) + 1
+//        }
+//        KDNodeKind::Leaf(_idx) => {
+//          1
+//        }
+//      }
+//    }
+//    println!("{}", depth(&mesh.tree));
+
+Object {
+        geo: Geo::Rectangle(Rectangle::new(Vec3(30.0, 40.0, 50.0), Vec3(10.0, 20.0, -20.0), Vec3(0.0, 10.0, 10.0))),
+        color: Color::RGB(Vec3(1.0, 0.5, 1.0)),
+        texture: Texture::Specular,
+      },
+      Object {
+        geo: Geo::Rectangle(Rectangle::new(Vec3(70.0, 30.0, 60.0), Vec3(10.0, 20.0, -20.0), Vec3(0.0, 10.0, 10.0))),
+        color: Color::RGB(Vec3(1.0, 0.5, 1.0)),
+        texture: Texture::Specular,
+      },
+      Object {
+        geo: Geo::Rectangle(Rectangle::new(Vec3(30.0, 40.0, 50.0), Vec3(40.0, -10.0, 10.0), Vec3(0.0, 10.0, 10.0))),
+        color: Color::RGB(Vec3(1.0, 0.5, 1.0)),
+        texture: Texture::Specular,
+      },
+      Object {
+        geo: Geo::Rectangle(Rectangle::new(Vec3(40.0, 60.0, 30.0), Vec3(40.0, -10.0, 10.0), Vec3(0.0, 10.0, 10.0))),
+        color: Color::RGB(Vec3(1.0, 0.5, 1.0)),
+        texture: Texture::Specular,
+      },
+      Object {
+        geo: Geo::Rectangle(Rectangle::new(Vec3(30.0, 40.0, 50.0), Vec3(40.0, -10.0, 10.0), Vec3(10.0, 20.0, -20.0))),
+        color: Color::RGB(Vec3(1.0, 0.5, 1.0)),
+        texture: Texture::Specular,
+      },
+      Object {
+        geo: Geo::Rectangle(Rectangle::new(Vec3(30.0, 50.0, 60.0), Vec3(40.0, -10.0, 10.0), Vec3(10.0, 20.0, -20.0))),
+        color: Color::RGB(Vec3(1.0, 0.5, 1.0)),
+        texture: Texture::Specular,
+      },
+
+
+
+
+  pub fn from_slice(s: &[Vec3]) -> AABB {
+    assert!(s.len() >= 1);
+    let mut min = Vec3(1e9, 1e9, 1e9);
+    let mut max = Vec3(-1e9, -1e9, -1e9);
+    for v in s {
+      min.0 = min.0.min(v.0);
+      min.1 = min.1.min(v.1);
+      min.2 = min.2.min(v.2);
+      max.0 = max.0.max(v.0);
+      max.1 = max.1.max(v.1);
+      max.2 = max.2.max(v.2);
+    }
+    AABB { min, max }
+  }
+
+  let norm = if tangent_theta.len2() < EPS * EPS { // this happens when original x = 0
+          let xz = Vec2(tangent_t.0, tangent_t.2);
+          let xz_len = xz.len();
+          if tangent_t.1 < 0.0 {
+            let xz = xz / xz_len * -tangent_t.1;
+            Vec3(xz.0, xz_len, xz.1)
+          } else {
+            let xz = xz / xz_len * tangent_t.1;
+            Vec3(xz.0, -xz_len, xz.1)
+          }
+        } else { tangent_theta.cross(tangent_t) };
+      // guarantee norm vector point to the out of surface
+//      let norm = if (point + norm * EPS).len2() < point.len2() { -norm } else { norm };
+
+geo: Geo::Mesh(load::bezier_curve("tmp/vase.txt").unwrap().to_mesh(400, 400,
+                                                                           Mat44::shift(30.0, 40.0, 30.0) * Mat44::scale(50.0, 50.0, 50.0) * Mat44::rot_x_deg(180.0) * Mat44::scale(0.1, 0.1, 0.1))),
+
+
+// water drop in the space
+      Object {
+        geo: Geo::RotateBezier(load::bezier_curve("tmp/vase.txt").unwrap().to_rotate_bezier(40, 40,
+                                                                                            Mat44::shift(30.0, 40.0, 30.0) * Mat44::scale(50.0, 50.0, 50.0) * Mat44::rot_x_deg(180.0) * Mat44::scale(0.1, 0.1, 0.1))),
+
+//        geo: Geo::Mesh(load::mesh("tmp/dragon.obj", Mat44::shift(50.0, 0.0, 50.0) * Mat44::scale(40.0, 40.0, 40.0)).unwrap()),
+//        color: Color::RGB(Vec3(1.0, 1.0, 1.0)),
+        color: load::texture("./tmp/vase.png", false).unwrap(),
+//        texture: Texture::Diffuse,
+        texture: Texture::Mixed { d_prob: 0.45, s_prob: 0.55 },
+      },
+
+
+
+      Object { // left
+//        geo: Geo::InfPlane(InfPlane::new(Vec3(-200.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0))),
+        geo: Geo::Rectangle(Rectangle::new(Vec3(-200.0, 0.0, 0.0), Vec3(0.0, 0.0, 400.0), Vec3(0.0, 170.0, 0.0))),
+//        color: Color::RGB(Vec3(0.75, 0.25, 0.25)),
+        color: load::texture("./result/star4.png", true).unwrap(),
+        texture: Texture::Diffuse,
+      },
+      Object { // right
+//        geo: Geo::InfPlane(InfPlane::new(Vec3(100.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0))),
+        geo: Geo::Rectangle(Rectangle::new(Vec3(100.0, 0.0, 0.0), Vec3(0.0, 0.0, 400.0), Vec3(0.0, 170.0, 0.0))),
+//        color: Color::RGB(Vec3(0.25, 0.25, 0.75)),
+        color: load::texture("./result/star2.png", true).unwrap(),
+        texture: Texture::Diffuse,
+      },
+      Object { // back
+        geo: Geo::Rectangle(Rectangle::new(Vec3(-200.0, 0.0, 0.0), Vec3(300.0, 0.0, 0.0), Vec3(0.0, 170.0, 0.0))),
+//        color: Color::RGB(Vec3(0.75, 0.75, 0.75)),
+        color: load::texture("./result/star6.png", true).unwrap(),
+        texture: Texture::Diffuse,
+      },
+//      Object { // front
+////        geo: Geo::InfPlane(InfPlane::new(Vec3(0.0, 0.0, 400.0), Vec3(0.0, 0.0, 1.0))),
+//        geo: Geo::Rectangle(Rectangle::new(Vec3(-200.0, 0.0, 400.0), Vec3(300.0, 0.0, 0.0), Vec3(0.0, 170.0, 0.0))),
+//        color: load::texture("./result/star5.png", true).unwrap(),
+////        color: Color::RGB(Vec3::zero()),
+//        texture: Texture::Diffuse,
+//      },
+      Object { // bottom
+//        geo: Geo::InfPlane(InfPlane::new(Vec3(0.0, 0.0, 0.0), Vec3(0.0, 1.0, 0.0))),
+        geo: Geo::Rectangle(Rectangle::new(Vec3(-200.0, 0.0, 0.0), Vec3(300.0, 0.0, 0.0), Vec3(0.0, 0.0, 400.0))),
+        color: load::texture("./result/star3.png", true).unwrap(),
+//        color: Color::RGB(Vec3(0.75, 0.75, 0.75)),
+        texture: Texture::Diffuse,
+      },
+//      Object { // top
+//        geo: Geo::InfPlane(InfPlane::new(Vec3(0.0, 170.0, 0.0), Vec3(0.0, 1.0, 0.0))),
+//        color: Color::RGB(Vec3(0.75, 0.75, 0.75)),
+//        texture: Texture::Diffuse,
+//      },
+light: LightSource::new(LightGeo::Circle(Circle::new(Vec3(0.0, 170.0 - 0.5, 80.0), Vec3(0.0, 1.0, 0.0), 80.0)),
+                            Vec3(11.0, 11.0, 11.0), 0),
+cam: Ray::new(Vec3(-65.0, 50.0, 400.0), Vec3(0.3, 0.0, -1.0)),
+
+
+
+//      Object {
+//        geo: Geo::Mesh(load::mesh("tool/water.obj", Mat44::shift(0.0, 2.5, 0.0)).unwrap()),
+//        color: Color::RGB(Vec3(0.75, 0.75, 1.00)),
+//        texture: Texture::Refractive,
+//      },
+
+
+
+//  let mut pe = PhyEmulator::new(((0.0, 100.0), (0.0, 100.0), (0.0, 100.0)), Vec3(0.0, -10.0, 0.0), 10000.0, 1e-3 / 30.0);
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(30.0, 35.0, 50.0), r: 13.0 }, v: Vec3(0.0, 0.0, 10.0), m: 1.0 });
+//  pe.ss.push(MovingSphere { s: Sphere { c: Vec3(70.0, 35.0, 50.0), r: 13.0 }, v: Vec3(0.0, 0.0, -10.0), m: 1.0 });
+
+//  for frame in 0..90 {
+//    println!("frame {}", frame);
+//    for _ in 0..10000 { pe.next(); }
+//    use std::process::Command;
+//    world.objs.truncate(6);
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[0].s),
+//      color: Color::RGB(Vec3(0.999, 0.999, 0.999)),
+//      texture: Texture::Specular,
+//    });
+//    world.objs.push(Object {
+//      geo: Geo::Sphere(pe.ss[1].s),
+//      color: Color::RGB(Vec3(0.999, 0.999, 0.999)),
+//      texture: Texture::Refractive,
+//    });
+//    CodegenBase::new(CudaCodegen).gen(&world, "ray_tracer.cu");
+//    Command::new("nvcc").args(&["-O3", "--use_fast_math", "ray_tracer.cu"]).spawn().unwrap().wait();
+//    Command::new("./a.out").args(&["8192", &format!("image{:>04}.png", frame)]).spawn().unwrap().wait();
+////    let png = world.path_tracing(1000);
+////    let _ = png.write(&format!("image{:>02}.png", frame));
+//  }
+
+
+//            Vec3 p1 = pe[i], e1 = pe[i + 1], e2 = pe[i + 2];
+//            Vec3 p = ray.d.cross(e2);
+//            f32 det = e1.dot(p);
+//            f32 inv_det = 1.0f / det;
+//            Vec3 d = ray.o - p1;
+//            f32 u = d.dot(p) * inv_det;
+//            if (u < 0.0f || u > 1.0f) { continue; }
+//            Vec3 q = d.cross(e1);
+//            f32 v = ray.d.dot(q) * inv_det;
+//            if (v < 0.0f || u + v > 1.0f) { continue; };
+//            f32 t = e2.dot(q) * inv_det;
+//            if (t > EPS) {
+//              if (t < res.t) {
+//                res.t = t;
+//                res.norm = n[i] * (1.0f - u - v) + n[i + 1] * u + n[i + 2] * v;
+//                res.text = text;
+//                if (col.x < 0.0) {
+//                  res.col = (uv[i] * (1.0f - u - v) + uv[i + 1] * u + uv[i + 2] * v).to_vec3();
+//                } else {
+//                  res.col = col;
+//                }
+//                hit = true;
+//              }
+//              if (t < t_max) {
+//                return hit;
+//              }
+//            }
+
+
+
+//        KDNodeKind::Leaf(idx) => {
+//          f.write_u32::<LittleEndian>((idx.len() * 3) as u32 | (1 << 31)).unwrap();
+//          for &(i, j, k) in idx.as_ref() {
+//            let (p1, p2, p3) = (mesh.v[i as usize], mesh.v[j as usize], mesh.v[k as usize]);
+//            let (e1, e2) = (p2 - p1, p3 - p1);
+//            write_vec!(p1);
+//            write_vec!(e1);
+//            write_vec!(e2);
+//          }
+//          for &(i, j, k) in idx.as_ref() {
+//            write_vec!(mesh.norm[i as usize]);
+//            write_vec!(mesh.norm[j as usize]);
+//            write_vec!(mesh.norm[k as usize]);
+//          }
+//          match &object.color {
+//            Color::Image { data: _, w: _, h: _ } => {
+//              for &(i, j, k) in idx.as_ref() {
+//                write_vec2!(mesh.uv[i as usize]);
+//                write_vec2!(mesh.uv[j as usize]);
+//                write_vec2!(mesh.uv[k as usize]);
+//              }
+//            }
+//            _ => {}
+//          }
+//        }
+
+
+
+//            Vec3 p1 = pe[i], e1 = pe[i + 1], e2 = pe[i + 2];
+//            Vec3 p = ray.d.cross(e2);
+//            f32 det = e1.dot(p);
+//            f32 inv_det = 1.0f / det;
+//            Vec3 d = ray.o - p1;
+//            f32 u = d.dot(p) * inv_det;
+//            if (u < 0.0f || u > 1.0f) { continue; }
+//            Vec3 q = d.cross(e1);
+//            f32 v = ray.d.dot(q) * inv_det;
+//            if (v < 0.0f || u + v > 1.0f) { continue; };
+//            f32 t = e2.dot(q) * inv_det;
+//            if (t > EPS) {
+//              if (t < res.t) {
+//                res.t = t;
+//                res.norm = n[i] * (1.0f - u - v) + n[i + 1] * u + n[i + 2] * v;
+//                res.text = text;
+//                if (col.x < 0.0) {
+//                  res.col = (uv[i] * (1.0f - u - v) + uv[i + 1] * u + uv[i + 2] * v).to_vec3();
+//                } else {
+//                  res.col = col;
+//                }
+//                hit = true;
+//              }
+//              if (t < t_max) {
+//                return hit;
+//              }
+//            }
+
+
+
+#include <cmath>
+#include <cstdlib>
+#include <cstdio>
+#include <vector>
+#include <algorithm>
+
+#ifdef __CUDACC__
+#define DEVICE __device__
+#define CONSTANT __constant__
+#define SHARED __shared__
+#define GLOBAL __global__
+#else
+#define DEVICE
+#define CONSTANT
+#define SHARED
+#define GLOBAL
+#endif
+#define CUDA_BLOCK_SIZE 32
+
+using u8 = unsigned char;
+using u32 = unsigned;
+using u64 = unsigned long long;
+using f32 = float;
+
+constexpr f32 EPS = 1.0f / 1024.0f;
+constexpr f32 PI = 3.14159265358979323846264338327950288f;
+
+struct Vec3 {
+  f32 x, y, z;
+
+  Vec3(f32 x_ = 0, f32 y_ = 0, f32 z_ = 0) : x(x_), y(y_), z(z_) {}
+
+  Vec3 operator-() const { return Vec3(-x, -y, -z); }
+
+  Vec3 operator+(const Vec3 &a) const { return Vec3(x + a.x, y + a.y, z + a.z); }
+
+  Vec3 operator-(const Vec3 &a) const { return Vec3(x - a.x, y - a.y, z - a.z); }
+
+  Vec3 operator+(f32 p) const { return Vec3(x + p, y + p, z + p); }
+
+  Vec3 operator-(f32 p) const { return Vec3(x - p, y - p, z - p); }
+
+  Vec3 operator*(f32 p) const { return Vec3(x * p, y * p, z * p); }
+
+  Vec3 operator/(f32 p) const { return Vec3(x / p, y / p, z / p); }
+
+  bool operator==(const Vec3 &a) const { return x == a.x && y == a.y && z == a.z; }
+
+  bool operator!=(const Vec3 &a) const { return x != a.x || y != a.y || z != a.z; }
+
+  Vec3 &operator+=(const Vec3 &a) { return *this = *this + a; }
+
+  Vec3 &operator-=(const Vec3 &a) { return *this = *this - a; }
+
+  Vec3 &operator+=(f32 p) { return *this = *this + p; }
+
+  Vec3 &operator-=(f32 p) { return *this = *this - p; }
+
+  Vec3 &operator*=(f32 p) { return *this = *this * p; }
+
+  Vec3 &operator/=(f32 p) { return *this = *this / p; }
+
+  f32 operator|(const Vec3 &a) const { return x * a.x + y * a.y + z * a.z; }
+
+  f32 dot(const Vec3 &a) const { return x * a.x + y * a.y + z * a.z; }
+
+  Vec3 max(const Vec3 &a) const { return Vec3(std::max(x, a.x), std::max(y, a.y), std::max(z, a.z)); }
+
+  Vec3 min(const Vec3 &a) const { return Vec3(std::min(x, a.x), std::min(y, a.y), std::min(z, a.z)); }
+
+  f32 len() const { return sqrt(x * x + y * y + z * z); }
+
+  f32 len2() const { return x * x + y * y + z * z; }
+
+  Vec3 operator&(const Vec3 &a) const { return Vec3(y * a.z - z * a.y, z * a.x - x * a.z, x * a.y - y * a.x); }
+
+  Vec3 cross(const Vec3 &a) const { return Vec3(y * a.z - z * a.y, z * a.x - x * a.z, x * a.y - y * a.x); }
+
+  Vec3 norm() const { return (*this) / len(); }
+
+  Vec3 clip(f32 r0 = 0, f32 r1 = 1) const {
+    return Vec3(x > r1 ? r1 : x < r0 ? r0 : x, y > r1 ? r1 : y < r0 ? r0 : y, z > r1 ? r1 : z < r0 ? r0 : z);
+  }
+
+  Vec3 schur(const Vec3 &rhs) const {
+    return {x * rhs.x, y * rhs.y, z * rhs.z};
+  }
+
+  Vec3 orthogonal_unit() const {
+    return fabsf(y) != 1.0f ? Vec3{z, 0.0f, -x}.norm() : Vec3{0.0f, z, -y}.norm();
+  }
+
+  Vec3 reflect(const Vec3 &n) const { return (*this) - n * 2. * n.dot(*this); }
+
+  Vec3 refract(const Vec3 &n, f32 ni, f32 nr) const { // smallPT1.ppt Page#72
+    f32 cosi = this->norm().dot(n);
+    f32 nir = ni / nr;
+    f32 cosr2 = 1. - nir * nir * (1 - cosi * cosi);
+    if (cosr2 <= 0)
+      return Vec3();
+    f32 cosr = sqrt(cosr2);
+    if (cosi > 0) // out
+      cosr = -cosr;
+    return ((*this) * nir - n * (nir * cosi + cosr)).norm();
+  }
+
+  f32 operator[](u32 idx) const {
+    return (&x)[idx];
+  }
+};
+
+
+struct Vec2 {
+  f32 x, y;
+
+  DEVICE Vec2 operator+(const Vec2 &rhs) const {
+    return {x + rhs.x, y + rhs.y};
+  }
+
+  DEVICE Vec2 operator-(const Vec2 &rhs) const {
+    return {x - rhs.x, y - rhs.y};
+  }
+
+  DEVICE Vec2 operator*(f32 rhs) const {
+    return {x * rhs, y * rhs};
+  }
+
+  DEVICE f32 dot(const Vec2 &rhs) const {
+    return x * rhs.x + y * rhs.y;
+  }
+
+  DEVICE f32 len2() const {
+    return dot(*this);
+  }
+
+  DEVICE f32 len() const {
+    return sqrtf(len2());
+  }
+
+  DEVICE Vec3 to_vec3() const {
+    return {x, y, 0.0f};
+  }
+};
+
+DEVICE inline f32 mod1(f32 x) {
+  x = fmodf(x, 1.0f);
+  return x < 0.0f ? x + 1.0f : x;
+}
+
+struct Ray {
+  Vec3 o, d;
+};
+
+struct XorShiftRNG {
+  u32 seed;
+
+  DEVICE XorShiftRNG(u32 seed) : seed(seed ? seed : 1) {}
+
+  DEVICE f32 gen() {
+    seed ^= seed << 13;
+    seed ^= seed >> 17;
+    seed ^= seed << 5;
+    return seed * (1.0f / -1u);
+  }
+};
+
+struct HitRes {
+  f32 t;
+  Vec3 norm;
+  u32 text;
+  Vec3 col;
+};
+
+/*
+Copyright (C) 2017 Milo Yip. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+* Neither the name of pngout nor the names of its
+  contributors may be used to endorse or promote products derived from
+  this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
+inline void svpng(FILE *fp, u32 w, u32 h, const u8 *img, bool alpha) {
+  static const u32 t[] = {0, 0x1db71064, 0x3b6e20c8, 0x26d930ac, 0x76dc4190, 0x6b6b51f4, 0x4db26158, 0x5005713c,
+      /* CRC32 Table */    0xedb88320, 0xf00f9344, 0xd6d6a3e8, 0xcb61b38c, 0x9b64c2b0, 0x86d3d2d4, 0xa00ae278,
+                          0xbdbdf21c};
+  u32 a = 1, b = 0, c, p = w * (alpha ? 4 : 3) + 1, x, y, i;   /* ADLER-a, ADLER-b, CRC, pitch */
+#define SVPNG_PUT(u) fputc(u, fp)
+#define SVPNG_U8A(ua, l) for (i = 0; i < l; i++) SVPNG_PUT((ua)[i]);
+#define SVPNG_U32(u) do { SVPNG_PUT((u) >> 24); SVPNG_PUT(((u) >> 16) & 255); SVPNG_PUT(((u) >> 8) & 255); SVPNG_PUT((u) & 255); } while(0)
+#define SVPNG_U8C(u) do { SVPNG_PUT(u); c ^= (u); c = (c >> 4) ^ t[c & 15]; c = (c >> 4) ^ t[c & 15]; } while(0)
+#define SVPNG_U8AC(ua, l) for (i = 0; i < l; i++) SVPNG_U8C((ua)[i])
+#define SVPNG_U16LC(u) do { SVPNG_U8C((u) & 255); SVPNG_U8C(((u) >> 8) & 255); } while(0)
+#define SVPNG_U32C(u) do { SVPNG_U8C((u) >> 24); SVPNG_U8C(((u) >> 16) & 255); SVPNG_U8C(((u) >> 8) & 255); SVPNG_U8C((u) & 255); } while(0)
+#define SVPNG_U8ADLER(u) do { SVPNG_U8C(u); a = (a + (u)) % 65521; b = (b + a) % 65521; } while(0)
+#define SVPNG_BEGIN(s, l) do { SVPNG_U32(l); c = ~0U; SVPNG_U8AC(s, 4); } while(0)
+#define SVPNG_END() SVPNG_U32(~c)
+  SVPNG_U8A("\x89PNG\r\n\32\n", 8);           /* Magic */
+  SVPNG_BEGIN("IHDR", 13);                    /* IHDR chunk { */
+  SVPNG_U32C(w);
+  SVPNG_U32C(h);                              /*   Width & Height (8 bytes) */
+  SVPNG_U8C(8);
+  SVPNG_U8C(alpha ? 6 : 2);                   /*   Depth=8, Color=True color with/without alpha (2 bytes) */
+  SVPNG_U8AC("\0\0\0", 3);                    /*   Compression=Deflate, Filter=No, Interlace=No (3 bytes) */
+  SVPNG_END();                                /* } */
+  SVPNG_BEGIN("IDAT", 2 + h * (5 + p) + 4);   /* IDAT chunk { */
+  SVPNG_U8AC("\x78\1", 2);                    /*   Deflate block begin (2 bytes) */
+  for (y = 0; y < h; y++) {                   /*   Each horizontal line makes a block for simplicity */
+    SVPNG_U8C(y == h - 1);                    /*   1 for the last block, 0 for others (1 byte) */
+    SVPNG_U16LC(p);
+    SVPNG_U16LC(~p);                          /*   Size of block in little endian and its 1's complement (4 bytes) */
+    SVPNG_U8ADLER(0);                         /*   No filter prefix (1 byte) */
+    for (x = 0; x < p - 1; x++, img++)
+      SVPNG_U8ADLER(*img);                    /*   Image pixel data */
+  }
+  SVPNG_U32C((b << 16) | a);                  /*   Deflate block end with adler (4 bytes) */
+  SVPNG_END();                                /* } */
+  SVPNG_BEGIN("IEND", 0);
+  SVPNG_END();                                /* IEND chunk {} */
+}
+
+inline void output_png(const Vec3 *o, u32 w, u32 h, const char *path) {
+  auto to_u8 = [](f32 x) { return u8(powf(x < 0.0f ? 0.0f : x > 1.0f ? 1.0f : x, 1.0f / 2.2f) * 255.0f + 0.5f); };
+  FILE *fp = fopen(path, "w");
+  u8 *png = (u8 *) malloc(w * h * 3 * sizeof(u8));
+  for (u32 i = h - 1, cnt = 0; ~i; --i) {
+    for (u32 j = 0; j < w; ++j) {
+      png[cnt] = to_u8(o[i * w + j].x);
+      png[cnt + 1] = to_u8(o[i * w + j].y);
+      png[cnt + 2] = to_u8(o[i * w + j].z);
+      cnt += 3;
+    }
+  }
+  svpng(fp, w, h, png, false);
+  fclose(fp);
+  free(png);
+}
+
+struct SPPMnode {
+  Vec3 pos, col, dir;
+  int index;
+  f32 r;
+
+  SPPMnode() {
+    index = -1;
+  }
+
+  SPPMnode(Vec3 pos_, Vec3 col_, Vec3 dir_, f32 r_ = 1, int index_ = -1) :
+      pos(pos_), col(col_), dir(dir_), index(index_), r(r_) {}
+};
+
+f32 sqr(f32 x) { return x * x; }
+
+struct IMGbuf {
+  f32 n;
+  Vec3 f;
+
+  IMGbuf() : n(0), f(0, 0, 0) {}
+
+  IMGbuf(f32 n_, Vec3 f_) : n(n_), f(f_) {}
+
+  void add(Vec3 c, f32 p = 1.) { n += p, f += c; }
+
+  Vec3 getcol() { return f / n; }
+
+  void reset() {
+    n = 0;
+    f.x = f.y = f.z = 0;
+  }
+
+  IMGbuf operator+(const IMGbuf &a) const { return IMGbuf(n + a.n, f + a.f); }
+
+  IMGbuf operator*(f32 p) const { return IMGbuf(n * p, f * p); }
+
+  IMGbuf operator/(f32 p) const { return IMGbuf(n / p, f / p); }
+
+  IMGbuf &operator+=(const IMGbuf &a) { return *this = *this + a; }
+
+  Vec3 get() { return n < EPS ? f : f / n; }
+};
+
+class KDTree {
+public:
+  int n;
+
+  struct KDTreeNode {
+    SPPMnode sppm;
+    Vec3 m[2];
+  };
+
+  KDTreeNode *tree;
+
+  KDTree() { tree = NULL; }
+
+  ~KDTree() { if (tree != NULL) delete[] tree; }
+
+  void mt(int f, int x) {
+    tree[f].m[0] = tree[f].m[0].min(tree[x].m[0]);
+    tree[f].m[1] = tree[f].m[1].max(tree[x].m[1]);
+  }
+
+  void bt(int l, int r, int d) {
+    int o = l + r >> 1;
+    std::nth_element(tree + l, tree + o, tree + r + 1,
+                     [d](const KDTreeNode &l, const KDTreeNode &r) { return l.sppm.pos[d] < r.sppm.pos[d]; });
+    tree[o].m[0] = tree[o].sppm.pos - tree[o].sppm.r;
+    tree[o].m[1] = tree[o].sppm.pos + tree[o].sppm.r;
+    if (o - 1 >= l) {
+      bt(l, o - 1, d == 2 ? 0 : d + 1);
+      mt(o, (l + o - 1) >> 1);
+    }
+    if (r >= o + 1) {
+      bt(o + 1, r, d == 2 ? 0 : d + 1);
+      mt(o, (r + o + 1) >> 1);
+    }
+  }
+
+  KDTree(std::vector <SPPMnode> &node) {
+    init(node);
+  }
+
+  void init(std::vector <SPPMnode> &node) {
+    n = node.size();
+    if (tree != NULL) delete[] tree;
+    tree = new KDTreeNode[n + 1];
+    for (int i = 0; i < n; ++i) {
+      tree[i + 1].sppm = node[i];
+    }
+    bt(1, n, 0);
+  }
+
+  void _query(const SPPMnode &node, IMGbuf *c, int l, int r) {
+    if (l > r) { return; }
+    int o = l + r >> 1;
+    const Vec3 &min = tree[o].m[0];
+    const Vec3 &max = tree[o].m[1];
+    if (!(min.x < node.pos.x && node.pos.x < max.x && min.y < node.pos.y && node.pos.y < max.y && min.z < node.pos.z &&
+          node.pos.z < max.z)) { return; }
+    if ((tree[o].sppm.pos - node.pos).len2() <= sqr(tree[o].sppm.r))// && tree[o].sppm.dir.dot(node.dir) >= 0)
+      c[tree[o].sppm.index].add(node.col.schur(tree[o].sppm.col), 1);
+    _query(node, c, l, o - 1);
+    _query(node, c, o + 1, r);
+  }
+
+  void query(SPPMnode node, IMGbuf *c) {
+    _query(node, c, 1, n);
+  }
+};
+
+//int main() {
+//  int w = atoi(argv[1]), h = atoi(argv[2]), iter = atoi(argv[4]);
+//  f32 rad = atof(argv[6]), alpha = atof(argv[7]), samp = atof(argv[5]) * w * h;
+//  Ray cam(Vec3(150, 28, 260), Vec3(-0.45, 0.001, -1).norm());
+//  int nth = omp_get_num_procs();
+//  --scene_num;
+//  Vec3 cx = Vec3(w * .33 / h), cy = (cx & Vec3(cam.d.x, 0, cam.d.z)).norm() * .33;
+//  IMGbuf **c = new IMGbuf *[nth];
+//  for (int i = 0; i < nth; ++i)
+//    c[i] = new IMGbuf[h * w];
+//  IMGbuf *final = new IMGbuf[h * w];
+//  IMGbuf *now = new IMGbuf[h * w];
+//  cx *= 1.05;
+//  f32 aperture = .0;
+//  std::vector <SPPMnode> ball[nth];
+//  KDTree tree;
+//  for (int _ = 1; _ <= iter; fprintf(stderr, "\riter %d done!\n", _), ++_, samp /= sqrt(alpha), rad *= alpha) {
+//#pragma omp parallel for num_threads(nth) schedule(dynamic, 1)
+//    for (int y = 0; y < h; ++y) {
+//      int num = omp_get_thread_num();
+//      fprintf(stderr, "\rbuif32 kdtree %5.2f%% ... ", 100. * y / h);
+//      for (int x = 0; x < w; ++x)
+//        for (int sy = 0; sy < 2; ++sy)
+//          for (int sx = 0; sx < 2; ++sx) {
+//            unsigned short X[3] = {y + sy, y * x * time(0) + sx, y * x * y + time(0) + sy * 2 + sx};
+//            f32 r1 = 2 * erand48(X), dx = r1 < 1 ? sqrt(r1) : 2 - sqrt(2 - r1);
+//            f32 r2 = 2 * erand48(X), dy = r2 < 1 ? sqrt(r2) : 2 - sqrt(2 - r2);
+//            Vec3 d = cx * ((dx / 2 + x + sx) / w - .5) + cy * ((dy / 2 + y + sy) / h - .5) + cam.d;
+//            Vec3 pp = cam.o + d * 150, loc = cam.o + (Vec3(erand48(X) * 1.05, erand48(X)) - .5) * 2 * aperture;
+//            std::vector <SPPMnode> tmp = sppm_backtrace(Ray(pp, (pp - loc).norm()), 0, y * w + x, X);
+//            for (int i = 0; i < tmp.size(); ++i)
+//              if (tmp[i].index >= 0) {
+//                tmp[i].r = rad;
+//                ball[num].push_back(tmp[i]);
+//              }
+//          }
+//    }
+//    std::vector <SPPMnode> totball;
+//    fprintf(stderr, "\rbuif32 tree ... ");
+//    for (int i = 0; i < nth; ++i) {
+//      totball.insert(totball.end(), ball[i].begin(), ball[i].end());
+//      // printf("%d: %d\n", i, ball[i].size());
+//    }
+//    tree.init(totball);
+//    fprintf(stderr, "done!\n");
+//
+//    fprintf(stderr, "rad = %f samp = %.0f\n", rad, samp);
+//    int per = samp / nth + 1;
+//#pragma omp parallel for num_threads(nth) schedule(dynamic, 1)
+//    for (int t = 0; t < nth; ++t) {
+//      unsigned short X[3] = {t, t * t, (t & (t * t)) + _ + time(0)};
+//      int num = omp_get_thread_num();
+//      for (int __ = 0; __ < per; __++) {
+//        if (num == 0 && __ % 1000 == 0)
+//          fprintf(stderr, "\rsppm tracing %5.2f%%", 100. * __ / per);
+//        f32 rc = erand48(X) * 18, tht = erand48(X) * 2 * PI;
+//        Vec3 o(50 + rc * cos(tht), 81.6 - EPS, 81.6 + rc * sin(tht));
+//        f32 r1 = 2 * PI * erand48(X), r2 = erand48(X), r2s = sqrt(r2);
+//        Vec3 w = Vec3(0, -1, 0), u = (Vec3(1).cross(w)).norm(), v = w.cross(u);
+//        Vec3 d = (u * cos(r1) * r2s + v * sin(r1) * r2s + w * sqrt(1 - r2)).norm();
+//        Ray light = Ray(o, d);
+//        Vec3 col = Vec3(1, 1, 1) + .4;
+//        tree.query(SPPMnode(o, col, d), c[num]);
+//        sppm_forward(light, 0, col, X, c[num], &tree);
+//      }
+//    }
+//    // gather result
+//    memset(now, 0, sizeof(IMGbuf) * w * h);
+//    for (int i = 0; i < nth; memset(c[i], 0, sizeof(IMGbuf) * w * h), ++i)
+//      for (int j = h * w - 1; j >= 0; --j)
+//        now[j] += c[i][j];
+//    for (int i = h * w - 1; i >= 0; --i)
+//      final[i] += now[i] / now[i].n;// * alpha;
+//
+//    char sout[100];
+//    sprintf(sout, "%s%03d.ppm", argv[3], _);
+//    FILE *f = fopen(sout, "w");
+//    fprintf(f, "P6\n%d %d\n%d\n", w, h, 255);
+//    for (int y = h - 1; y >= 0; --y)
+//      for (int x = w - 1; x >= 0; --x) {
+//        fprintf(f, "%c%c%c", gamma_trans(final[y * w + x].get().x), gamma_trans(final[y * w + x].get().y),
+//                gamma_trans(final[y * w + x].get().z));
+//      }
+//    fclose(f);
+//  }
+//}
+
+
+#include "tool/ppm_tracer.hpp"
+#include <cstring>
+#include <omp.h>
+
+// camera to scene
+void build_photon_map(Ray ray, int index, XorShiftRNG &rng, std::vector <SPPMnode> &buf) {
+  Vec3 fac{1.0f, 1.0f, 1.0f};
+  for (u32 _ = 0; _ < 6; ++_) {
+    HitRes res{1e10};
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{1, 0, 0});
+      f32 t = (Vec3{0, 0, 0} - ray.o).dot(Vec3{1, 0, 0}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{1, 0, 0};
+        res.text = 0;
+        res.col = Vec3{0.75, 0.25, 0.25};
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{1, 0, 0});
+      f32 t = (Vec3{10, 0, 0} - ray.o).dot(Vec3{1, 0, 0}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{1, 0, 0};
+        res.text = 0;
+        res.col = Vec3{0.25, 0.25, 0.75};
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{0, 0, 1});
+      f32 t = (Vec3{0, 0, 0} - ray.o).dot(Vec3{0, 0, 1}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{0, 0, 1};
+        res.text = 0;
+        res.col = Vec3{0.75, 0.75, 0.75};
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{0, 0, 1});
+      f32 t = (Vec3{0, 0, 20} - ray.o).dot(Vec3{0, 0, 1}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{0, 0, 1};
+        res.text = 0;
+        res.col = Vec3{0, 0, 0};
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{0, 1, 0});
+      f32 t = (Vec3{0, 0, 0} - ray.o).dot(Vec3{0, 1, 0}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{0, 1, 0};
+        res.text = 0;
+        res.col = Vec3{0.75, 0.75, 0.75};
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{0, 1, 0});
+      f32 t = (Vec3{0, 8.5, 0} - ray.o).dot(Vec3{0, 1, 0}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{0, 1, 0};
+        res.text = 0;
+        res.col = Vec3{0.75, 0.75, 0.75};
+      }
+    }
+    {
+      Vec3 oc = Vec3{2.7, 1.65, 6.5} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 1.65 * 1.65;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t && t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{2.7, 1.65, 6.5}).norm();
+          res.text = 1;
+          res.col = Vec3{0.999, 0.999, 0.999};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{7.3, 1.6, 7.8} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 1.65 * 1.65;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t && t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{7.3, 1.6, 7.8}).norm();
+          res.text = 2;
+          res.col = Vec3{0.999, 0.999, 0.999};
+        }
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{0, 1, 0});
+      f32 t = (Vec3{5, 8.45, 5} - ray.o).dot(Vec3{0, 1, 0}) / dot_d_n;
+      if (t > EPS && t < res.t && (ray.o + ray.d * t - Vec3{5, 8.45, 5}).len2() < 2.25) {
+        return; // absorb
+      }
+    }
+    if (res.t == 1e10) { break; }
+    Vec3 p = ray.o + ray.d * res.t;
+    fac = fac.schur(res.col);
+    switch (res.text) {
+      case 0: {
+        buf.push_back(SPPMnode(p, fac, res.norm.dot(ray.d) < 0 ? res.norm : -res.norm, 1, index));
+        return;
+      }
+      case 1: {
+        ray = {p, ray.d - res.norm * 2.0f * res.norm.dot(ray.d)};
+        break;
+      }
+      case 2: {
+        constexpr f32 NA = 1.0f, NG = 1.5f, R0 = (NA - NG) * (NA - NG) / ((NA + NG) * (NA + NG));
+        f32 cos = res.norm.dot(ray.d), sin = sqrtf(1.0f - cos * cos), n;
+        Vec3 norm_d = res.norm;
+        if (cos < 0.0f) {
+          n = NG / NA;
+          cos = -cos;
+          norm_d = -norm_d;
+        } else {
+          n = NA / NG;
+          if (sin >= n) {
+            ray = {p, ray.d - res.norm * 2.0f * res.norm.dot(ray.d)};
+            break;
+          }
+        }
+        if (rng.gen() < R0 + (1.0f - R0) * powf(1.0f - cos, 5)) {
+          ray = {p, ray.d - res.norm * 2.0f * res.norm.dot(ray.d)};
+        } else {
+          ray = {p, norm_d * (sqrtf(1.0f - sin * sin / (n * n)) - cos / n) + ray.d / n};
+        }
+        break;
+      }
+    }
+  }
+}
+
+void photon_tracing(Ray ray, XorShiftRNG &rng, IMGbuf *c, KDTree *kdt) {
+  Vec3 fac{1.0f, 1.0f, 1.0f};
+  for (u32 _ = 0; _ < 6; ++_) {
+    HitRes res{1e10};
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{1, 0, 0});
+      f32 t = (Vec3{0, 0, 0} - ray.o).dot(Vec3{1, 0, 0}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{1, 0, 0};
+        res.text = 0;
+        res.col = Vec3{0.75, 0.25, 0.25};
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{1, 0, 0});
+      f32 t = (Vec3{10, 0, 0} - ray.o).dot(Vec3{1, 0, 0}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{1, 0, 0};
+        res.text = 0;
+        res.col = Vec3{0.25, 0.25, 0.75};
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{0, 0, 1});
+      f32 t = (Vec3{0, 0, 0} - ray.o).dot(Vec3{0, 0, 1}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{0, 0, 1};
+        res.text = 0;
+        res.col = Vec3{0.75, 0.75, 0.75};
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{0, 0, 1});
+      f32 t = (Vec3{0, 0, 20} - ray.o).dot(Vec3{0, 0, 1}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{0, 0, 1};
+        res.text = 0;
+        res.col = Vec3{0, 0, 0};
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{0, 1, 0});
+      f32 t = (Vec3{0, 0, 0} - ray.o).dot(Vec3{0, 1, 0}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{0, 1, 0};
+        res.text = 0;
+        res.col = Vec3{0.75, 0.75, 0.75};
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{0, 1, 0});
+      f32 t = (Vec3{0, 8.5, 0} - ray.o).dot(Vec3{0, 1, 0}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{0, 1, 0};
+        res.text = 0;
+        res.col = Vec3{0.75, 0.75, 0.75};
+      }
+    }
+    {
+      Vec3 oc = Vec3{2.7, 1.65, 6.5} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 1.65 * 1.65;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t && t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{2.7, 1.65, 6.5}).norm();
+          res.text = 1;
+          res.col = Vec3{0.999, 0.999, 0.999};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{7.3, 1.6, 7.8} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 1.65 * 1.65;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t && t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{7.3, 1.6, 7.8}).norm();
+          res.text = 2;
+          res.col = Vec3{0.999, 0.999, 0.999};
+        }
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{0, 1, 0});
+      f32 t = (Vec3{5, 8.45, 5} - ray.o).dot(Vec3{0, 1, 0}) / dot_d_n;
+      if (t > EPS && t < res.t && (ray.o + ray.d * t - Vec3{5, 8.45, 5}).len2() < 2.25) {
+        Vec3 p = ray.o + ray.d * t;
+        kdt->query(SPPMnode(p, fac, Vec3(0.0, 1.0, 0.0).dot(ray.d) < 0 ? Vec3(0.0, 1.0, 0.0) : Vec3(0.0, -1.0, 0.0)),
+                   c);
+        return;
+      }
+    }
+    if (res.t == 1e10) { break; }
+    Vec3 p = ray.o + ray.d * res.t;
+    switch (res.text) {
+      case 0: {
+        kdt->query(SPPMnode(p, fac, res.norm.dot(ray.d) < 0 ? res.norm : -res.norm), c);
+        f32 r1 = 2.0f * PI * rng.gen();
+        f32 r2 = rng.gen(), r2s = sqrtf(r2);
+        Vec3 w = res.norm.dot(ray.d) < 0.0f ? res.norm : -res.norm;
+        Vec3 u = w.orthogonal_unit();
+        Vec3 v = w.cross(u);
+        Vec3 d = (u * cosf(r1) + v * sinf(r1)) * r2s + w * sqrtf(1.0f - r2);
+        ray = {p, d.norm()};
+        break;
+      }
+      case 1: {
+        ray = {p, ray.d - res.norm * 2.0f * res.norm.dot(ray.d)};
+        break;
+      }
+      case 2: {
+        constexpr f32 NA = 1.0f, NG = 1.5f, R0 = (NA - NG) * (NA - NG) / ((NA + NG) * (NA + NG));
+        f32 cos = res.norm.dot(ray.d), sin = sqrtf(1.0f - cos * cos), n;
+        Vec3 norm_d = res.norm;
+        if (cos < 0.0f) {
+          n = NG / NA;
+          cos = -cos;
+          norm_d = -norm_d;
+        } else {
+          n = NA / NG;
+          if (sin >= n) {
+            ray = {p, ray.d - res.norm * 2.0f * res.norm.dot(ray.d)};
+            break;
+          }
+        }
+        if (rng.gen() < R0 + (1.0f - R0) * powf(1.0f - cos, 5)) {
+          ray = {p, ray.d - res.norm * 2.0f * res.norm.dot(ray.d)};
+        } else {
+          ray = {p, norm_d * (sqrtf(1.0f - sin * sin / (n * n)) - cos / n) + ray.d / n};
+        }
+        break;
+      }
+    }
+    fac = fac.schur(res.col);
+  }
+}
+
+int main(int argc, char **argv) {
+  int w = atoi(argv[1]), h = atoi(argv[2]), iter = atoi(argv[4]);
+  f32 rad = atof(argv[6]), alpha = atof(argv[7]), samp = atof(argv[5]) * w * h;
+  const Ray cam{Vec3{5, 5.2, 29.56}, Vec3{0, -0.042573366, -0.9990933}};
+  const Vec3 cx{0.5135, 0, 0};
+  const Vec3 cy{0, 0.5130344, -0.021861423};
+  int nth = omp_get_num_procs();;
+  IMGbuf **c = new IMGbuf *[nth];
+  for (int i = 0; i < nth; ++i)
+    c[i] = new IMGbuf[h * w];
+  IMGbuf *final = new IMGbuf[h * w];
+  IMGbuf *now = new IMGbuf[h * w];
+  f32 aperture = .0;
+  // build kdtree
+  std::vector <SPPMnode> ball[nth];
+  KDTree tree;
+  auto gamma_trans = [](f32 x) { return u8(powf(x < 0.0f ? 0.0f : x > 1.0f ? 1.0f : x, 1.0f / 2.2f) * 255.0f + 0.5f); };
+  for (int _ = 1; _ <= iter; fprintf(stderr, "\riter %d done!\n", _), ++_, samp /= sqrt(alpha), rad *= alpha) {
+#pragma omp parallel for num_threads(nth) schedule(dynamic, 1)
+    for (int y = 0; y < h; ++y) {
+      int num = omp_get_thread_num();
+      fprintf(stderr, "\rbuild kdtree %5.2f%% ... ", 100. * y / h);
+      for (int x = 0; x < w; ++x) {
+        XorShiftRNG rng{num * 19260817u + y * w + x};
+//        for (int s = 0; s < 2; ++s) {
+        for (int sy = 0; sy < 2; ++sy) {
+          for (int sx = 0; sx < 2; ++sx) {
+            f32 r1 = 2 * rng.gen(), dx = r1 < 1 ? sqrtf(r1) : 2 - sqrtf(2 - r1);
+            f32 r2 = 2 * rng.gen(), dy = r2 < 1 ? sqrtf(r2) : 2 - sqrtf(2 - r2);
+            Vec3 d = cx * ((dx / 2 + x + sx) / w - .5) + cy * ((dy / 2 + y + sy) / h - .5) + cam.d;
+            Vec3 pp = cam.o + d * 15, loc = cam.o;
+            build_photon_map(Ray{pp, (pp - loc).norm()}, y * w + x, rng, ball[num]);
+          }
+        }
+//        }
+      }
+    }
+    std::vector <SPPMnode> totball;
+    fprintf(stderr, "\rbuild tree ... ");
+    int osize = totball.size();
+    for (int i = 0; i < nth; ++i) {
+      totball.insert(totball.end(), ball[i].begin(), ball[i].end());
+    }
+    for (int i = osize; i < totball.size(); ++i) {
+      totball[i].r = rad;
+    }
+    printf("total len = %d\n", int(totball.size()));
+    tree.init(totball);
+    fprintf(stderr, "done!\n");
+
+    fprintf(stderr, "rad = %f samp = %.0f\n", rad, samp);
+    int per = samp / nth + 1;
+#pragma omp parallel for num_threads(nth) schedule(dynamic, 1)
+    for (int t = 0; t < nth; ++t) {
+      int num = omp_get_thread_num();
+      XorShiftRNG rng{num * 19260817u + t * 19660813u};
+      for (int __ = 0; __ < per; __++) {
+        if (num == 0 && __ % 1000 == 0)
+          fprintf(stderr, "\rsppm tracing %5.2f%%", 100. * __ / per);
+        // gen random light
+        f32 rc = rng.gen() * 2.25, tht = rng.gen() * 2 * PI;
+        Vec3 o(5 + rc * cos(tht), 8.45 - EPS, 5 + rc * sin(tht)); // TODO
+        f32 r1 = 2 * PI * rng.gen(), r2 = rng.gen(), r2s = sqrt(r2);
+        Vec3 w = Vec3(0, -1, 0), u = (Vec3(1).cross(w)).norm(), v = w.cross(u);
+        Vec3 d = (u * cos(r1) * r2s + v * sin(r1) * r2s + w * sqrt(1 - r2)).norm();
+        Ray light{o, d};
+        Vec3 col = Vec3(1, 1, 1) + .4;
+        tree.query(SPPMnode(o, col, d), c[num]);
+        photon_tracing(light, rng, c[num], &tree);
+      }
+    }
+    // gather result
+    memset(now, 0, sizeof(IMGbuf) * w * h);
+    for (int i = 0; i < nth; memset(c[i], 0, sizeof(IMGbuf) * w * h), ++i)
+      for (int j = h * w - 1; j >= 0; --j)
+        now[j] += c[i][j];
+    for (int i = h * w - 1; i >= 0; --i)
+      final[i] += now[i] / (now[i].n + 1);// * alpha;
+    char sout[20];
+    sprintf(sout, "%s%03d.ppm", argv[3], _);
+    FILE *f = fopen(sout, "w");
+    fprintf(f, "P6\n%d %d\n%d\n", w, h, 255);
+    for (int y = h - 1; y >= 0; --y)
+      for (int x = 0; x < w; ++x) {
+        fprintf(f, "%c%c%c", gamma_trans(final[y * w + x].get().x), gamma_trans(final[y * w + x].get().y),
+                gamma_trans(final[y * w + x].get().z));
+      }
+    fclose(f);
+  }
+}
+
+#include <cmath>
+#include <cstdlib>
+#include <cstdio>
+
+#ifdef __CUDACC__
+#define DEVICE __device__
+#define CONSTANT __constant__
+#define SHARED __shared__
+#define GLOBAL __global__
+#else
+#define DEVICE
+#define CONSTANT
+#define SHARED
+#define GLOBAL
+#endif
+#define CUDA_BLOCK_SIZE 32
+
+using u8 = unsigned char;
+using u32 = unsigned;
+using u64 = unsigned long long;
+using f32 = float;
+
+constexpr f32 EPS = 1.0f / 256.0f;
+constexpr f32 PI = 3.14159265358979323846264338327950288f;
+constexpr f32 ALPHA = 0.7f;
+
+struct Vec3 {
+  f32 x, y, z;
+
+  DEVICE Vec3 operator+(const Vec3 &rhs) const {
+    return {x + rhs.x, y + rhs.y, z + rhs.z};
+  }
+
+  DEVICE Vec3 operator+(f32 rhs) const {
+    return {x + rhs, y + rhs, z + rhs};
+  }
+
+  DEVICE Vec3 operator-(const Vec3 &rhs) const {
+    return {x - rhs.x, y - rhs.y, z - rhs.z};
+  }
+
+  DEVICE Vec3 operator-(f32 rhs) const {
+    return {x - rhs, y - rhs, z - rhs};
+  }
+
+  DEVICE Vec3 operator*(f32 rhs) const {
+    return {x * rhs, y * rhs, z * rhs};
+  }
+
+  DEVICE Vec3 operator/(f32 rhs) const {
+    return *this * (1.0f / rhs);
+  }
+
+  DEVICE Vec3 operator-() const {
+    return {-x, -y, -z};
+  }
+
+  DEVICE void operator+=(const Vec3 &rhs) {
+    x += rhs.x, y += rhs.y, z += rhs.z;
+  }
+
+  DEVICE void operator-=(const Vec3 &rhs) {
+    x -= rhs.x, y -= rhs.y, z -= rhs.z;
+  }
+
+  DEVICE void operator*=(f32 rhs) {
+    x *= rhs, y *= rhs, z *= rhs;
+  }
+
+  DEVICE void operator/=(f32 rhs) {
+    *this *= 1.0f / rhs;
+  }
+
+  DEVICE f32 len2() const {
+    return dot(*this);
+  }
+
+  DEVICE f32 len() const {
+    return sqrtf(len2());
+  }
+
+  DEVICE Vec3 norm() const {
+    return *this / len();
+  }
+
+  DEVICE Vec3 orthogonal_unit() const {
+    return fabsf(y) != 1.0f ? Vec3{z, 0.0f, -x}.norm() : Vec3{0.0f, z, -y}.norm();
+  }
+
+  DEVICE Vec3 schur(const Vec3 &rhs) const {
+    return {x * rhs.x, y * rhs.y, z * rhs.z};
+  }
+
+  DEVICE f32 dot(const Vec3 &rhs) const {
+    return x * rhs.x + y * rhs.y + z * rhs.z;
+  }
+
+  DEVICE Vec3 cross(const Vec3 &rhs) const {
+    return {y * rhs.z - z * rhs.y, z * rhs.x - x * rhs.z, x * rhs.y - y * rhs.x};
+  }
+
+  DEVICE f32 operator[](u32 idx) const {
+    return (&x)[idx];
+  }
+
+#ifdef __CUDACC__
+  DEVICE static Vec3 from_float4(float4 f) {
+    return {f.x, f.y, f.z};
+  }
+#endif
+};
+
+struct Vec32 {
+  f32 x, y;
+
+  DEVICE Vec32 operator+(const Vec32 &rhs) const {
+    return {x + rhs.x, y + rhs.y};
+  }
+
+  DEVICE Vec32 operator-(const Vec32 &rhs) const {
+    return {x - rhs.x, y - rhs.y};
+  }
+
+  DEVICE Vec32 operator*(f32 rhs) const {
+    return {x * rhs, y * rhs};
+  }
+
+  DEVICE f32 dot(const Vec32 &rhs) const {
+    return x * rhs.x + y * rhs.y;
+  }
+
+  DEVICE f32 len2() const {
+    return dot(*this);
+  }
+
+  DEVICE f32 len() const {
+    return sqrtf(len2());
+  }
+
+  DEVICE Vec3 to_vec3() const {
+    return {x, y, 0.0f};
+  }
+};
+
+DEVICE inline f32 mod1(f32 x) {
+  x = fmodf(x, 1.0f);
+  return x < 0.0f ? x + 1.0f : x;
+}
+
+struct Ray {
+  Vec3 o, d;
+};
+
+struct HitRes {
+  f32 t;
+  Vec3 norm;
+  u32 text;
+  Vec3 col;
+};
+
+#define BB_HIT_RAY_OUT(out_min, out_max, min, max, o, inv_d)                                     \
+  ({                                                                                             \
+    Vec3 __t0s = (min - o).schur(inv_d), t1s = (max - o).schur(inv_d);                           \
+    out_min = fmaxf(fminf(__t0s.x, t1s.x), fmaxf(fminf(__t0s.y, t1s.y), fminf(__t0s.z, t1s.z))); \
+    out_max = fminf(fmaxf(__t0s.x, t1s.x), fminf(fmaxf(__t0s.y, t1s.y), fmaxf(__t0s.z, t1s.z))); \
+    0.0f < out_max && out_min < out_max;                                                         \
+  })
+
+#define BB_HIT_RAY(min, max, o, inv_d)                    \
+  ({                                                      \
+    f32 __t_min, __t_max;                                 \
+    BB_HIT_RAY_OUT(__t_min, __t_max, min, max, o, inv_d); \
+  })
+
+// used for calculate triangle-ray hit
+// http://jcgt.org/published/0005/03/03/
+struct TriMat {
+  f32 m00, m01, m02, m03;
+  f32 m10, m11, m12, m13;
+  f32 m20, m21, m22, m23;
+};
+
+struct KDNode {
+  Vec3 min, max;
+  union {
+    struct { // leaf, len = actual len | (1 << 31)
+      u32 len;
+      TriMat ms[0]; // also store n & uv after ms
+    };
+    struct { // internal
+      u32 ch1, sp_d;
+      f32 sp;
+    };
+  };
+};
+
+// "short stack" algorithm
+// http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.83.2823&rep=rep1&type=pdf
+// if col.x < 0.0, rt should contain color info(after ptr n)
+DEVICE inline bool kd_node_hit(const KDNode *__restrict__ rt, const Ray &ray, HitRes &res, u32 text, const Vec3 &col) {
+  struct {
+    u32 off;
+    f32 t_min, t_max;
+  } stk[16];
+  u32 top = 0;
+  const char *__restrict__ rt_b = (const char *) rt;
+  Vec3 inv_d{1.0f / ray.d.x, 1.0f / ray.d.y, 1.0f / ray.d.z};
+  f32 root_min, root_max, t_min, t_max;
+  const KDNode *__restrict__ x;
+  bool push_down, hit = false;
+  if (BB_HIT_RAY_OUT(root_min, root_max, rt->min, rt->max, ray.o, inv_d)) {
+    t_max = root_min;
+    while (t_max < root_max) {
+      if (top == 0) {
+        t_min = t_max;
+        t_max = root_max;
+        x = rt;
+        push_down = true;
+      } else {
+        --top;
+        t_min = stk[top].t_min;
+        t_max = stk[top].t_max;
+        x = (const KDNode *) (rt_b + stk[top].off);
+        push_down = false;
+      }
+      while (BB_HIT_RAY(x->min, x->max, ray.o, inv_d)) {
+        if (x->len >> 31) { // leaf
+          u32 len = x->len & 0x7fffffff;
+          const TriMat *__restrict__ ms = x->ms;
+          const Vec3 *__restrict__ n = (const Vec3 *) (ms + len);
+          const Vec32 *__restrict__ uv = (const Vec32 *) (n + len);
+          for (u32 i = 0; i < len; ++i) {
+            TriMat m = ms[i];
+            f32 dz = m.m20 * ray.d.x + m.m21 * ray.d.y + m.m22 * ray.d.z;
+            f32 oz = m.m20 * ray.o.x + m.m21 * ray.o.y + m.m22 * ray.o.z + m.m23;
+            f32 t = -oz / dz;
+            if (t < EPS || t > res.t) { continue; }
+            Vec3 hp{ray.o.x + t * ray.d.x, ray.o.y + t * ray.d.y, ray.o.z + t * ray.d.z};
+            f32 u = m.m00 * hp.x + m.m01 * hp.y + m.m02 * hp.z + m.m03;
+            f32 v = m.m10 * hp.x + m.m11 * hp.y + m.m12 * hp.z + m.m13;
+            if (u < 0.0f || v < 0.0f || u + v > 1.0f) { continue; }
+            res.t = t;
+            res.norm = n[i * 3] * (1.0f - u - v) + n[i * 3 + 1] * u + n[i * 3 + 2] * v;
+            res.text = text;
+            if (col.x < 0.0) {
+              res.col = (uv[i * 3] * (1.0f - u - v) + uv[i * 3 + 1] * u + uv[i * 3 + 2] * v).to_vec3();
+            } else {
+              res.col = col;
+            }
+            hit = true;
+
+//            Vec3 p1 = pe[i], e1 = pe[i + 1], e2 = pe[i + 2];
+//            Vec3 p = ray.d.cross(e2);
+//            f32 det = e1.dot(p);
+//            f32 inv_det = 1.0f / det;
+//            Vec3 d = ray.o - p1;
+//            f32 u = d.dot(p) * inv_det;
+//            if (u < 0.0f || u > 1.0f) { continue; }
+//            Vec3 q = d.cross(e1);
+//            f32 v = ray.d.dot(q) * inv_det;
+//            if (v < 0.0f || u + v > 1.0f) { continue; };
+//            f32 t = e2.dot(q) * inv_det;
+//            if (t > EPS) {
+//              if (t < res.t) {
+//                res.t = t;
+//                res.norm = n[i] * (1.0f - u - v) + n[i + 1] * u + n[i + 2] * v;
+//                res.text = text;
+//                if (col.x < 0.0) {
+//                  res.col = (uv[i] * (1.0f - u - v) + uv[i + 1] * u + uv[i + 2] * v).to_vec3();
+//                } else {
+//                  res.col = col;
+//                }
+//                hit = true;
+//              }
+//              if (t < t_max) {
+//                return hit;
+//              }
+//            }
+          }
+          break;
+        } else { // internal
+          u32 sp_d = x->sp_d;
+          f32 sp = x->sp;
+          f32 t_sp = (sp - ray.o[sp_d]) / ray.d[sp_d];
+          u32 fst = ((const char *) (x) - rt_b) + 24 + 12, snd = x->ch1;
+          if (ray.d[sp_d] < 0.0) {
+            u32 t = fst;
+            fst = snd;
+            snd = t;
+          }
+          if (t_sp <= t_min) {
+            x = (const KDNode *) (rt_b + snd);
+          } else if (t_sp >= t_max) {
+            x = (const KDNode *) (rt_b + fst);
+          } else {
+            stk[top++] = {snd, t_sp, t_max};
+            x = (const KDNode *) (rt_b + fst);
+            t_max = t_sp;
+            push_down = false;
+          }
+          if (push_down) {
+            rt = x;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
+
+// Halton sequence with reverse permutation
+constexpr u32 primes[61] = {
+    2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79,
+    83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181,
+    191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283
+};
+
+f32 hal(u32 b, int j) {
+  auto rev = [](int i, int p) { return i == 0 ? 0 : p - i; };
+  u32 p = primes[b];
+  f32 h = 0.0, f = 1.0 / (f32) p, fct = f;
+  while (j > 0) {
+    h += rev(j % p, p) * fct;
+    j /= p;
+    fct *= f;
+  }
+  return h;
+}
+
+struct HitPoint {
+  Vec3 fac, pos, norm, flux;
+  f32 r2;
+  u32 n; // n = N / ALPHA in the paper
+  int pix;
+};
+
+struct List {
+  HitPoint *hp;
+  List *nxt;
+
+  List *add(HitPoint *hp) {
+    return new List{hp, this};
+  }
+};
+
+u32 num_hash, pixel_index;
+f32 hash_s;
+List **hash_grid;
+List *hitpoints = NULL;
+
+struct AABB {
+  Vec3 min, max; // axis aligned bounding box
+
+  void expand(const Vec3 &p) {
+    min.x = fminf(min.x, p.x);
+    min.y = fminf(min.y, p.y);
+    min.z = fminf(min.z, p.z);
+    max.x = fmaxf(max.x, p.x);
+    max.y = fmaxf(max.y, p.y);
+    max.z = fmaxf(max.z, p.z);
+  }
+} hpbbox;
+
+inline u32 hash(int x, int y, int z) {
+  return (u32) ((x * 73856093) ^ (y * 19349663) ^ (z * 83492791)) % num_hash;
+}
+
+// geo hash
+inline void build_hash_grid(u32 w, u32 h) {
+  hpbbox = {Vec3{1e10, 1e10, 1e10}, Vec3{-1e10, -1e10, -1e10}};
+  for (List *l = hitpoints; l; l = l->nxt) {
+    hpbbox.expand(l->hp->pos);
+  }
+  printf("%f %f %f\n", hpbbox.min.x, hpbbox.min.y, hpbbox.min.z);
+  printf("%f %f %f\n", hpbbox.max.x, hpbbox.max.y, hpbbox.max.z);
+
+  // heuristic for initial radius
+  Vec3 size = hpbbox.max - hpbbox.min;
+  f32 irad = ((size.x + size.y + size.z) / 3.0) / ((w + h) / 2.0) * 2.0;
+//  irad /= 5;
+//  printf("irad=%f\n", irad);
+  // determine hash table size
+  // we now find the bounding box of all the measurement points inflated by the initial radius
+  hpbbox = {Vec3{1e10, 1e10, 1e10}, Vec3{-1e10, -1e10, -1e10}};
+  int cnt = 0;
+  for (List *l = hitpoints; l; l = l->nxt) {
+    HitPoint *hp = l->hp;
+    hp->r2 = irad * irad;
+    hp->n = 0;
+    hp->flux = Vec3{};
+    ++cnt;
+    hpbbox.expand(hp->pos - irad);
+    hpbbox.expand(hp->pos + irad);
+  }
+
+  // make each grid cell two times larger than the initial radius
+  hash_s = 1.0 / (irad * 2.0);
+  num_hash = cnt;
+
+  // build the hash table
+  hash_grid = new List *[num_hash]{};
+  for (List *l = hitpoints; l; l = l->nxt) {
+    HitPoint *hp = l->hp;
+    Vec3 min = (hp->pos - hpbbox.min - irad) * hash_s;
+    Vec3 max = (hp->pos - hpbbox.min + irad) * hash_s;
+    for (int iz = abs(int(min.z)); iz <= abs(int(max.z)); iz++) {
+      for (int iy = abs(int(min.y)); iy <= abs(int(max.y)); iy++) {
+        for (int ix = abs(int(min.x)); ix <= abs(int(max.x)); ix++) {
+          int hv = hash(ix, iy, iz);
+          hash_grid[hv] = hash_grid[hv]->add(hp);
+        }
+      }
+    }
+  }
+}
+
+void hit_point_pass(Ray ray, Vec3 fac, u32 dep) {
+  for (; dep < 32; ++dep) {
+    HitRes res{1e10};
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{1, 0, 0});
+      f32 t = (Vec3{0, 0, 0} - ray.o).dot(Vec3{1, 0, 0}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{1, 0, 0};
+        res.text = 0;
+        res.col = Vec3{0.75, 0.25, 0.25};
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{1, 0, 0});
+      f32 t = (Vec3{10, 0, 0} - ray.o).dot(Vec3{1, 0, 0}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{1, 0, 0};
+        res.text = 0;
+        res.col = Vec3{0.25, 0.25, 0.75};
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{0, 0, 1});
+      f32 t = (Vec3{0, 0, 0} - ray.o).dot(Vec3{0, 0, 1}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{0, 0, 1};
+        res.text = 0;
+        res.col = Vec3{0.75, 0.75, 0.75};
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{0, 0, 1});
+      f32 t = (Vec3{0, 0, 20} - ray.o).dot(Vec3{0, 0, 1}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{0, 0, 1};
+        res.text = 0;
+        res.col = Vec3{0, 0, 0};
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{0, 1, 0});
+      f32 t = (Vec3{0, 0, 0} - ray.o).dot(Vec3{0, 1, 0}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{0, 1, 0};
+        res.text = 0;
+        res.col = Vec3{0.75, 0.75, 0.75};
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{0, 1, 0});
+      f32 t = (Vec3{0, 8.5, 0} - ray.o).dot(Vec3{0, 1, 0}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{0, 1, 0};
+        res.text = 0;
+        res.col = Vec3{0.75, 0.75, 0.75};
+      }
+    }
+    {
+      Vec3 oc = Vec3{2.7, 1.65, 6.5} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 1.65 * 1.65;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t && t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{2.7, 1.65, 6.5}).norm();
+          res.text = 1;
+          res.col = Vec3{0.999, 0.999, 0.999};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{7.3, 1.6, 7.8} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 1.65 * 1.65;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t && t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{7.3, 1.6, 7.8}).norm();
+          res.text = 2;
+          res.col = Vec3{0.999, 0.999, 0.999};
+        }
+      }
+    }
+    if (res.t == 1e10) { break; }
+    Vec3 p = ray.o + ray.d * res.t;
+    fac = fac.schur(res.col);
+    switch (res.text) {
+      case 0: {
+        HitPoint *hp = new HitPoint{.fac=fac, .pos=p, .norm=res.norm, .flux=Vec3{}, .r2=0, .n=0, .pix = pixel_index};
+        hitpoints = hitpoints->add(hp);
+        return;
+      }
+      case 1: {
+        ray = {p, ray.d - res.norm * 2.0f * res.norm.dot(ray.d)};
+        break;
+      }
+      case 2: {
+        constexpr f32 NA = 1.0f, NG = 1.5f, R0 = (NA - NG) * (NA - NG) / ((NA + NG) * (NA + NG));
+        f32 cos = res.norm.dot(ray.d), sin = sqrtf(1.0f - cos * cos), n;
+        Vec3 norm_d = res.norm;
+        if (cos < 0.0f) {
+          n = NG / NA;
+          cos = -cos;
+          norm_d = -norm_d;
+        } else {
+          n = NA / NG;
+          if (sin >= n) {
+            ray = {p, ray.d - res.norm * 2.0f * res.norm.dot(ray.d)};
+            break;
+          }
+        }
+        f32 prob = R0 + (1.0f - R0) * powf(1.0f - cos, 5);
+        hit_point_pass({p, ray.d - res.norm * 2.0f * res.norm.dot(ray.d)}, fac * (1 - prob), dep + 1);
+        ray = Ray{p, norm_d * (sqrtf(1.0f - sin * sin / (n * n)) - cos / n) + ray.d / n};
+        fac *= prob;
+        break;
+      }
+    }
+  }
+}
+
+void photon_pass(Ray ray, Vec3 flux, u32 seed) {
+  Vec3 fac{1.0f, 1.0f, 1.0f};
+  for (u32 d = 0; d < 20; ++d) {
+    HitRes res{1e10};
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{1, 0, 0});
+      f32 t = (Vec3{0, 0, 0} - ray.o).dot(Vec3{1, 0, 0}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{1, 0, 0};
+        res.text = 0;
+        res.col = Vec3{0.75, 0.25, 0.25};
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{1, 0, 0});
+      f32 t = (Vec3{10, 0, 0} - ray.o).dot(Vec3{1, 0, 0}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{1, 0, 0};
+        res.text = 0;
+        res.col = Vec3{0.25, 0.25, 0.75};
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{0, 0, 1});
+      f32 t = (Vec3{0, 0, 0} - ray.o).dot(Vec3{0, 0, 1}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{0, 0, 1};
+        res.text = 0;
+        res.col = Vec3{0.75, 0.75, 0.75};
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{0, 0, 1});
+      f32 t = (Vec3{0, 0, 20} - ray.o).dot(Vec3{0, 0, 1}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{0, 0, 1};
+        res.text = 0;
+        res.col = Vec3{0, 0, 0};
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{0, 1, 0});
+      f32 t = (Vec3{0, 0, 0} - ray.o).dot(Vec3{0, 1, 0}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{0, 1, 0};
+        res.text = 0;
+        res.col = Vec3{0.75, 0.75, 0.75};
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{0, 1, 0});
+      f32 t = (Vec3{0, 8.5, 0} - ray.o).dot(Vec3{0, 1, 0}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        res.t = t;
+        res.norm = Vec3{0, 1, 0};
+        res.text = 0;
+        res.col = Vec3{0.75, 0.75, 0.75};
+      }
+    }
+    {
+      Vec3 oc = Vec3{2.7, 1.65, 6.5} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 1.65 * 1.65;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t && t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{2.7, 1.65, 6.5}).norm();
+          res.text = 1;
+          res.col = Vec3{0.999, 0.999, 0.999};
+        }
+      }
+    }
+    {
+      Vec3 oc = Vec3{7.3, 1.6, 7.8} - ray.o;
+      f32 b = oc.dot(ray.d);
+      f32 det = b * b - oc.len2() + 1.65 * 1.65;
+      if (det > 0.0f) {
+        f32 sq_det = sqrtf(det);
+        f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+        if (t && t < res.t) {
+          res.t = t;
+          res.norm = (ray.o + ray.d * t - Vec3{7.3, 1.6, 7.8}).norm();
+          res.text = 2;
+          res.col = Vec3{0.999, 0.999, 0.999};
+        }
+      }
+    }
+    if (res.t == 1e10) { break; }
+    Vec3 p = ray.o + ray.d * res.t;
+    fac = fac.schur(res.col);
+    u32 d2 = d * 2 + 2; // gen 2 random f32
+    switch (res.text) {
+      case 0: {
+        // photon ray
+        // find neighboring measurement points and accumulate flux via progressive density estimation
+        Vec3 hh = (p - hpbbox.min) * hash_s;
+        int ix = abs(int(hh.x)), iy = abs(int(hh.y)), iz = abs(int(hh.z));
+        for (List *l = hash_grid[hash(ix, iy, iz)]; l; l = l->nxt) {
+          HitPoint *hp = l->hp;
+          Vec3 v = hp->pos - p;
+          // check normals to be closer than 90 degree (avoids some edge brightning)
+          if ((hp->norm.dot(res.norm) > EPS) && (v.dot(v) <= hp->r2)) {
+            // unlike N in the paper, hp->n stores "N / ALPHA" to make it an integer value
+            f32 g = (hp->n * ALPHA + ALPHA) / (hp->n * ALPHA + 1.0);
+            hp->r2 = hp->r2 * g;
+            ++hp->n;
+            hp->flux = (hp->flux + hp->fac.schur(flux) * (1 / PI)) * g;
+//            printf("%f %f %f\n", hp->flux.x, hp->flux.y, hp->flux.z);
+          }
+        }
+        f32 r1 = 2 * PI * hal(d2, seed), r2 = hal(d2 + 1, seed), r2s = sqrtf(r2);
+        Vec3 w = res.norm.dot(ray.d) < 0.0f ? res.norm : -res.norm;
+        Vec3 u = w.orthogonal_unit();
+        Vec3 v = w.cross(u);
+        Vec3 d = (u * cosf(r1) + v * sinf(r1)) * r2s + w * sqrtf(1.0f - r2);
+        ray = {p, d.norm()};
+        break;
+      }
+      case 1: {
+        ray = {p, ray.d - res.norm * 2.0f * res.norm.dot(ray.d)};
+        break;
+      }
+      case 2: {
+        constexpr f32 NA = 1.0f, NG = 1.5f, R0 = (NA - NG) * (NA - NG) / ((NA + NG) * (NA + NG));
+        f32 cos = res.norm.dot(ray.d), sin = sqrtf(1.0f - cos * cos), n;
+        Vec3 norm_d = res.norm;
+        if (cos < 0.0f) {
+          n = NG / NA;
+          cos = -cos;
+          norm_d = -norm_d;
+        } else {
+          n = NA / NG;
+          if (sin >= n) {
+            ray = {p, ray.d - res.norm * 2.0f * res.norm.dot(ray.d)};
+            break;
+          }
+        }
+        if (hal(d2 - 1, seed) < R0 + (1.0f - R0) * powf(1.0f - cos, 5)) {
+          ray = {p, ray.d - res.norm * 2.0f * res.norm.dot(ray.d)};
+        } else {
+          ray = {p, norm_d * (sqrtf(1.0f - sin * sin / (n * n)) - cos / n) + ray.d / n};
+        }
+        break;
+      }
+    }
+  }
+}
+
+void trace(const Ray &r, int dpt, bool m, const Vec3 &fl, const Vec3 &adj, int i) {
+  HitRes res{1e10};
+  {
+    f32 dot_d_n = r.d.dot(Vec3{1, 0, 0});
+    f32 t = (Vec3{0, 0, 0} - r.o).dot(Vec3{1, 0, 0}) / dot_d_n;
+    if (t > EPS && t < res.t) {
+      res.t = t;
+      res.norm = Vec3{1, 0, 0};
+      res.text = 0;
+      res.col = Vec3{0.75, 0.25, 0.25};
+    }
+  }
+  {
+    f32 dot_d_n = r.d.dot(Vec3{1, 0, 0});
+    f32 t = (Vec3{10, 0, 0} - r.o).dot(Vec3{1, 0, 0}) / dot_d_n;
+    if (t > EPS && t < res.t) {
+      res.t = t;
+      res.norm = Vec3{1, 0, 0};
+      res.text = 0;
+      res.col = Vec3{0.25, 0.25, 0.75};
+    }
+  }
+  {
+    f32 dot_d_n = r.d.dot(Vec3{0, 0, 1});
+    f32 t = (Vec3{0, 0, 0} - r.o).dot(Vec3{0, 0, 1}) / dot_d_n;
+    if (t > EPS && t < res.t) {
+      res.t = t;
+      res.norm = Vec3{0, 0, 1};
+      res.text = 0;
+      res.col = Vec3{0.75, 0.75, 0.75};
+    }
+  }
+  {
+    f32 dot_d_n = r.d.dot(Vec3{0, 0, 1});
+    f32 t = (Vec3{0, 0, 20} - r.o).dot(Vec3{0, 0, 1}) / dot_d_n;
+    if (t > EPS && t < res.t) {
+      res.t = t;
+      res.norm = Vec3{0, 0, 1};
+      res.text = 0;
+      res.col = Vec3{0, 0, 0};
+    }
+  }
+  {
+    f32 dot_d_n = r.d.dot(Vec3{0, 1, 0});
+    f32 t = (Vec3{0, 0, 0} - r.o).dot(Vec3{0, 1, 0}) / dot_d_n;
+    if (t > EPS && t < res.t) {
+      res.t = t;
+      res.norm = Vec3{0, 1, 0};
+      res.text = 0;
+      res.col = Vec3{0.75, 0.75, 0.75};
+    }
+  }
+  {
+    f32 dot_d_n = r.d.dot(Vec3{0, 1, 0});
+    f32 t = (Vec3{0, 8.5, 0} - r.o).dot(Vec3{0, 1, 0}) / dot_d_n;
+    if (t > EPS && t < res.t) {
+      res.t = t;
+      res.norm = Vec3{0, 1, 0};
+      res.text = 0;
+      res.col = Vec3{0.75, 0.75, 0.75};
+    }
+  }
+  {
+    Vec3 oc = Vec3{2.7, 1.65, 6.5} - r.o;
+    f32 b = oc.dot(r.d);
+    f32 det = b * b - oc.len2() + 1.65 * 1.65;
+    if (det > 0.0f) {
+      f32 sq_det = sqrtf(det);
+      f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+      if (t && t < res.t) {
+        res.t = t;
+        res.norm = (r.o + r.d * t - Vec3{2.7, 1.65, 6.5}).norm();
+        res.text = 1;
+        res.col = Vec3{0.999, 0.999, 0.999};
+      }
+    }
+  }
+  {
+    Vec3 oc = Vec3{7.3, 1.6, 7.8} - r.o;
+    f32 b = oc.dot(r.d);
+    f32 det = b * b - oc.len2() + 1.65 * 1.65;
+    if (det > 0.0f) {
+      f32 sq_det = sqrtf(det);
+      f32 t = b - sq_det > EPS ? b - sq_det : b + sq_det > EPS ? b + sq_det : 0.0f;
+      if (t && t < res.t) {
+        res.t = t;
+        res.norm = (r.o + r.d * t - Vec3{7.3, 1.6, 7.8}).norm();
+        res.text = 2;
+        res.col = Vec3{0.999, 0.999, 0.999};
+      }
+    }
+  }
+
+  dpt++;
+  if (res.t == 1e10 || (dpt >= 20)) { return; }
+  f32 t = res.t;
+  Vec3 f = res.col, n = res.norm;
+  int d3 = dpt * 3;
+  Vec3 x = r.o + r.d * t;
+  Vec3 nl = n.dot(r.d) < 0 ? n : n * -1;
+  double p = f.x > f.y && f.x > f.z ? f.x : f.y > f.z ? f.y : f.z;
+
+  if (res.text == 0) {
+    // Lambertian
+
+    // use QMC to sample the nxt direction
+    double r1 = 2. * PI * hal(d3 - 1, i), r2 = hal(d3 + 0, i);
+    double r2s = sqrt(r2);
+    Vec3 w = nl, u = ((fabs(w.x) > .1 ? Vec3{0, 1} : Vec3{1}).cross(w)).norm();
+    Vec3 v = w.cross(u), d = (u * cos(r1) * r2s + v * sin(r1) * r2s + w * sqrt(1 - r2)).norm();
+
+    if (m) {
+      // eye ray
+      // store the measurment point
+      HitPoint *hp = new HitPoint;
+      hp->fac = f.schur(adj);
+      hp->pos = x;
+//      printf("o %f %f %f\n", r.o.x, r.o.y, r.o.z);
+//      printf("d %f %f %f\n", r.d.x, r.d.y, r.d.z);
+//      printf("t %f\n", t);
+//      printf("x %f %f %f\n", x.x, x.y, x.z);
+//      puts("");
+      hp->norm = n;
+      hp->pix = pixel_index;
+      hitpoints = hitpoints->add(hp);
+    } else {
+      // photon ray
+      // find neighboring measurement points and accumulate flux via progressive density estimation
+      Vec3 hh = (x - hpbbox.min) * hash_s;
+      int ix = abs(int(hh.x)), iy = abs(int(hh.y)), iz = abs(int(hh.z));
+      // strictly speaking, we should use #pragma omp critical here.
+      // it usually works without an artifact due to the fact that photons are
+      // rarely accumulated to the same measurement points at the same time (especially with QMC).
+      // it is also significantly faster.
+      {
+        List *hp = hash_grid[hash(ix, iy, iz)];
+        while (hp != NULL) {
+          HitPoint *hitpoint = hp->hp;
+          hp = hp->nxt;
+          Vec3 v = hitpoint->pos - x;
+          // check normals to be closer than 90 degree (avoids some edge brightning)
+          if ((hitpoint->norm.dot(n) > 1e-3) && (v.dot(v) <= hitpoint->r2)) {
+            // unlike N in the paper, hitpoint->n stores "N / ALPHA" to make it an integer value
+            double g = (hitpoint->n * ALPHA + ALPHA) / (hitpoint->n * ALPHA + 1.0);
+            hitpoint->r2 = hitpoint->r2 * g;
+            hitpoint->n++;
+            hitpoint->flux = (hitpoint->flux + hitpoint->fac.schur(fl) * (1. / PI)) * g;
+          }
+        }
+      }
+      if (hal(d3 + 1, i) < p) trace(Ray{x, d}, dpt, m, f.schur(fl) * (1. / p), adj, i);
+    }
+
+  } else if (res.text == 1) {
+    // mirror
+    trace(Ray{x, r.d - n * 2.0 * n.dot(r.d)}, dpt, m, f.schur(fl), f.schur(adj), i);
+
+  } else {
+    // glass
+    Ray lr{x, r.d - n * 2.0 * n.dot(r.d)};
+    bool into = (n.dot(nl) > 0.0);
+    double nc = 1.0, nt = 1.5, nnt = into ? nc / nt : nt / nc, ddn = r.d.dot(nl), cos2t;
+
+    // total internal reflection
+    if ((cos2t = 1 - nnt * nnt * (1 - ddn * ddn)) < 0) return trace(lr, dpt, m, fl, adj, i);
+
+    Vec3 td = (r.d * nnt - n * ((into ? 1 : -1) * (ddn * nnt + sqrt(cos2t)))).norm();
+    double a = nt - nc, b = nt + nc, R0 = a * a / (b * b), c = 1 - (into ? -ddn : td.dot(n));
+    double Re = R0 + (1 - R0) * c * c * c * c * c, P = Re;
+    Ray rr{x, td};
+    Vec3 fa = f.schur(adj);
+    if (m) {
+      // eye ray (trace both rays)
+      trace(lr, dpt, m, fl, fa * Re, i);
+      trace(rr, dpt, m, fl, fa * (1.0 - Re), i);
+    } else {
+      // photon ray (pick one via Russian roulette)
+      (hal(d3 - 1, i) < P) ? trace(lr, dpt, m, fl, fa, i) : trace(rr, dpt, m, fl, fa, i);
+    }
+  }
+}
+
+const u32 W = 1024, H = 1024;
+Vec3 output[W * H];
+
+int main(int argc, char **args) {
+  u32 np_1000 = argc > 1 ? std::atoi(args[1]) / 1000 + 1 : (puts("please specify #photon * 1000"), exit(-1), 0);
+  constexpr Ray cam{Vec3{5, 5.2, 29.56}, Vec3{0, -0.042573366, -0.9990933}};
+  constexpr Vec3 cx{0.5135, 0, 0};
+  constexpr Vec3 cy{0, 0.5130344, -0.021861423};
+  for (u32 y = 0; y < H; ++y) { // cannot parallel it because of too many race conditions
+    fprintf(stderr, "\rrendering: hit point pass %5.2f%%", 100.0 * y / (H - 1));
+    for (int x = 0; x < W; ++x) {
+      pixel_index = x + (H - 1 - y) * W;
+      Vec3 d = cx * ((x + 0.5f) / W - 0.5f) + cy * (-(y + 0.5f) / H + 0.5f) + cam.d;
+      trace(Ray{cam.o + d * 14, d.norm()}, 0, true, Vec3(), Vec3{1, 1, 1}, 0);
+//      hit_point_pass(Ray{cam.o + d * 14.0f, d.norm()}, Vec3{1.0f, 1.0f, 1.0f}, 0);
+    }
+  }
+  fputs("\nbuilding hash grids\n", stderr);
+  build_hash_grid(W, H);
+#pragma omp parallel for schedule(dynamic, 1)
+  for (u32 i = 0; i < np_1000; ++i) {
+    fprintf(stderr, "\rrendering: photon pass %5.2f%%", 100.0f * i / (np_1000 - 1));
+    int m = 1000 * i;
+    for (int j = 0; j < 1000; j++) {
+      f32 p = 2 * PI * hal(0, i), t = 2 * acosf(sqrtf(1 - hal(1, i)));
+      f32 st = sinf(t);
+      Ray r{Vec3{5, 8.45, 5}, Vec3{cosf(p) * st, cosf(t), sinf(p) * st}};
+      trace(r, 0, 0 > 1, Vec3{15, 15, 15} * (PI * 4.0), Vec3{1, 1, 1}, m + j);
+//      photon_pass(r, Vec3{10, 10, 10} * (PI * 4.0f), m + j);
+    }
+  }
+  fputs("", stderr);
+  for (List *l = hitpoints; l; l = l->nxt) {
+    HitPoint *hp = l->hp;
+    output[hp->pix] += hp->flux * (1.0f / (PI * hp->r2 * np_1000 * 1000.0f));
+  }
+  output_png(output, W, H, argc > 2 ? args[2] : "image.png");
+  fputs("\n", stderr);
+}
+
+
+const TriMat * __restrict__ ms = x->ms;
+          const Vec3 * __restrict__ n = (const Vec3 *)(ms + len);
+          const Vec2 * __restrict__ uv = (const Vec2 *)(n + len);
+          for (u32 i = 0; i < len; ++i) {
+            TriMat m = ms[i];
+            f32 dz = m.m20 * ray.d.x + m.m21 * ray.d.y + m.m22 * ray.d.z;
+            f32 oz = m.m20 * ray.o.x + m.m21 * ray.o.y + m.m22 * ray.o.z + m.m23;
+            f32 t = - oz / dz;
+            if (t < EPS || t > res.t) { continue; }
+            Vec3 hp{ray.o.x + t * ray.d.x, ray.o.y + t * ray.d.y, ray.o.z + t * ray.d.z};
+            f32 u = m.m00 * hp.x + m.m01 * hp.y + m.m02 * hp.z + m.m03;
+            f32 v = m.m10 * hp.x + m.m11 * hp.y + m.m12 * hp.z + m.m13;
+            if (u < 0.0f || v < 0.0f || u + v > 1.0f) { continue; }
+            res.t = t;
+            res.norm = n[i * 3] * (1.0f - u - v) + n[i * 3 + 1] * u + n[i * 3 + 2] * v;
+            res.text = text;
+            if (col.x < 0.0) {
+              res.col = (uv[i * 3] * (1.0f - u - v) + uv[i * 3 + 1] * u + uv[i * 3 + 2] * v).to_vec3();
+            } else {
+              res.col = col;
+            }
+            hit = true;
+          }
+          break;
+
+
+KDNodeKind::Leaf(idx) => {
+          let len_pos = f.len();
+          f.write_u32::<LittleEndian>(0).unwrap();
+          let mut len = 0u32;
+          let mut is_tri = vec![true; idx.len()];
+          for (idx, &(i, j, k)) in idx.iter().enumerate() {
+            let (p1, p2, p3) = (mesh.v[i as usize], mesh.v[j as usize], mesh.v[k as usize]);
+            let (e1, e2) = (p2 - p1, p3 - p1);
+            let mut m = [[0.0; 4]; 3];
+            let norm = e1.cross(e2);
+            if norm.0.abs() > norm.1.abs() && norm.0.abs() > norm.2.abs() {
+              m[0][0] = 0.0;
+              m[1][0] = 0.0;
+              m[2][0] = 1.0;
+              m[0][1] = e2.2 / norm.0;
+              m[1][1] = -e1.2 / norm.0;
+              m[2][1] = norm.1 / norm.0;
+              m[0][2] = -e2.1 / norm.0;
+              m[1][2] = e1.1 / norm.0;
+              m[2][2] = norm.2 / norm.0;
+              m[0][3] = p3.cross(p1).0 / norm.0;
+              m[1][3] = -p2.cross(p1).0 / norm.0;
+              m[2][3] = -p1.dot(norm) / norm.0;
+            } else if norm.1.abs() > norm.2.abs() {
+              m[0][0] = -e2.2 / norm.1;
+              m[1][0] = e1.2 / norm.1;
+              m[2][0] = norm.0 / norm.1;
+              m[0][1] = 0.0;
+              m[1][1] = 0.0;
+              m[2][1] = 1.0;
+              m[0][2] = e2.0 / norm.1;
+              m[1][2] = -e1.0 / norm.1;
+              m[2][2] = norm.2 / norm.1;
+              m[0][3] = p3.cross(p1).1 / norm.1;
+              m[1][3] = -p2.cross(p1).1 / norm.1;
+              m[2][3] = -p1.dot(norm) / norm.1;
+            } else if norm.2.abs() > 0.0 {
+              m[0][0] = e2.1 / norm.2;
+              m[1][0] = -e1.1 / norm.2;
+              m[2][0] = norm.0 / norm.2;
+              m[0][1] = -e2.0 / norm.2;
+              m[1][1] = e1.0 / norm.2;
+              m[2][1] = norm.1 / norm.2;
+              m[0][2] = 0.0;
+              m[1][2] = 0.0;
+              m[2][2] = 1.0;
+              m[0][3] = p3.cross(p1).2 / norm.2;
+              m[1][3] = -p2.cross(p1).2 / norm.2;
+              m[2][3] = -p1.dot(norm) / norm.2;
+            } // else => degenerate triangle, all 0
+            else {
+              is_tri[idx] = false;
+              continue;
+            }
+            len += 1;
+            for row in &m {
+              for &x in row {
+                f.write_f32::<LittleEndian>(x).unwrap();
+              }
+            }
+          }
+          let len_ptr = &mut f[len_pos..len_pos + 4];
+          let len = len | (1 << 31);
+          len_ptr[0] = (len & 255) as u8;
+          len_ptr[1] = (len >> 8 & 255) as u8;
+          len_ptr[2] = (len >> 16 & 255) as u8;
+          len_ptr[3] = (len >> 24 & 255) as u8;
+          for (idx, &(i, j, k)) in idx.iter().enumerate() {
+            if !is_tri[idx] { continue; }
+            write_vec!(mesh.norm[i as usize]);
+            write_vec!(mesh.norm[j as usize]);
+            write_vec!(mesh.norm[k as usize]);
+          }
+          match &object.color {
+            Color::Image { data: _, w: _, h: _ } => {
+              for (idx, &(i, j, k)) in idx.iter().enumerate() {
+                if !is_tri[idx] { continue; }
+                write_vec2!(mesh.uv[i as usize]);
+                write_vec2!(mesh.uv[j as usize]);
+                write_vec2!(mesh.uv[k as usize]);
+              }
+            }
+            _ => {}
+          }
+        }
+
+
+          u32 sel = rng.gen_u32() % 1150;
+          res.col = RGB_TABLE[sel] * 3;
+          res.n = 2.0 - (sel / 1150.0f) * 1;
+
+
+              {
+      f32 dot_d_n = ray.d.dot(Vec3{0.33333334, 0.6666667, -0.6666667});
+      f32 t = (Vec3{3, 2, 5} - ray.o).dot(Vec3{0.33333334, 0.6666667, -0.6666667}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        Vec3 p = ray.o + ray.d * t - Vec3{3, 2, 5};
+        f32 u = p.dot(Vec3{0, 0.49999997, 0.49999997});
+        f32 v = p.dot(Vec3{0.22222225, -0.055555563, 0.055555563});
+        if (0.0f < u && u < 1.0f && 0.0f < v && v < 1.0f) {
+          res.t = t;
+          res.norm = Vec3{0.33333334, 0.6666667, -0.6666667};
+          res.text = 2;
+          res.col = Vec3{1, 1, 1};
+          res.n = 1.5;
+          // u32 sel = rng.gen_u32() % 1150;
+          // res.col = RGB_TABLE[sel] * 3;
+          // res.n = 2.0 - (sel / 1150.0f) * 1;
+        }
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{-0.33333334, -0.6666667, 0.6666667});
+      f32 t = (Vec3{4, 4, 3} - ray.o).dot(Vec3{-0.33333334, -0.6666667, 0.6666667}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        Vec3 p = ray.o + ray.d * t - Vec3{4, 4, 3};
+        f32 u = p.dot(Vec3{0.22222225, -0.055555563, 0.055555563});
+        f32 v = p.dot(Vec3{0, 0.49999997, 0.49999997});
+        if (0.0f < u && u < 1.0f && 0.0f < v && v < 1.0f) {
+          res.t = t;
+          res.norm = Vec3{-0.33333334, -0.6666667, 0.6666667};
+          res.text = 2;
+          res.col = Vec3{1, 1, 1};
+          res.n = 1.5;
+          // u32 sel = rng.gen_u32() % 1150;
+          // res.col = RGB_TABLE[sel] * 3;
+          // res.n = 2.0 - (sel / 1150.0f) * 1;
+        }
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{0, -0.7071067, -0.7071067});
+      f32 t = (Vec3{3, 2, 5} - ray.o).dot(Vec3{0, -0.7071067, -0.7071067}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        Vec3 p = ray.o + ray.d * t - Vec3{3, 2, 5};
+        f32 u = p.dot(Vec3{0.11111112, 0.22222224, -0.22222224});
+        f32 v = p.dot(Vec3{0.22222225, -0.055555563, 0.055555563});
+        if (0.0f < u && u < 1.0f && 0.0f < v && v < 1.0f) {
+          res.t = t;
+          res.norm = Vec3{0, -0.7071067, -0.7071067};
+          res.text = 2;
+          // res.col = Vec3{1, 1, 1};
+          // res.n = 1.5;
+          u32 sel = rng.gen_u32() % 1150;
+          res.col = RGB_TABLE[sel] * 3;
+          res.n = 2.0 - (sel / 1150.0f) * 1;
+        }
+      }
+    }
+    {
+      f32 dot_d_n = ray.d.dot(Vec3{0, 0.7071067, 0.7071067});
+      f32 t = (Vec3{3, 3, 6} - ray.o).dot(Vec3{0, 0.7071067, 0.7071067}) / dot_d_n;
+      if (t > EPS && t < res.t) {
+        Vec3 p = ray.o + ray.d * t - Vec3{3, 3, 6};
+        f32 u = p.dot(Vec3{0.22222225, -0.055555563, 0.055555563});
+        f32 v = p.dot(Vec3{0.11111112, 0.22222224, -0.22222224});
+        if (0.0f < u && u < 1.0f && 0.0f < v && v < 1.0f) {
+          res.t = t;
+          res.norm = Vec3{0, 0.7071067, 0.7071067};
+          res.text = 2;
+          res.col = Vec3{1, 1, 1};
+          res.n = 1.5;
+          // u32 sel = rng.gen_u32() % 1150;
+          // res.col = RGB_TABLE[sel] * 3;
+          // res.n = 2.0 - (sel / 1150.0f) * 1;
+        }
+      }
+    }
+
+
+          Object { // left
+        geo: Geo::Rectangle(Rectangle::new(Vec3(3.0, 2.0, 5.0), Vec3(0.0, 1.0, 1.0), Vec3(1.0, 2.0, -2.0))),
+        color: Color::RGB(Vec3(1.0, 1.0, 1.0)),
+        texture: Texture::Refractive,
+      },
+      Object { // right
+        geo: Geo::Rectangle(Rectangle::new(Vec3(7.0, 1.0, 6.0), Vec3(1.0, 2.0, -2.0), Vec3(0.0, 1.0, 1.0))),
+        color: Color::RGB(Vec3(1.0, 1.0, 1.0)),
+        texture: Texture::Refractive,
+      },
+      Object { // front
+        geo: Geo::Rectangle(Rectangle::new(Vec3(3.0, 2.0, 5.0), Vec3(0.0, 1.0, 1.0), Vec3(4.0, -1.0, 1.0))),
+        color: Color::RGB(Vec3(1.0, 1.0, 1.0)),
+        texture: Texture::Refractive,
+      },
+      Object { // back
+        geo: Geo::Rectangle(Rectangle::new(Vec3(4.0, 4.0, 3.0), Vec3(4.0, -1.0, 1.0), Vec3(0.0, 1.0, 1.0))),
+        color: Color::RGB(Vec3(1.0, 1.0, 1.0)),
+        texture: Texture::Refractive,
+      },
+      Object { // bottom
+        geo: Geo::Rectangle(Rectangle::new(Vec3(3.0, 2.0, 5.0), Vec3(1.0, 2.0, -2.0), Vec3(4.0, -1.0, 1.0))),
+        color: Color::RGB(Vec3(1.0, 1.0, 1.0)),
+        texture: Texture::Refractive,
+      },
+      Object { // top
+        geo: Geo::Rectangle(Rectangle::new(Vec3(3.0, 3.0, 6.0), Vec3(4.0, -1.0, 1.0), Vec3(1.0, 2.0, -2.0))),
+        color: Color::RGB(Vec3(1.0, 1.0, 1.0)),
+        texture: Texture::Refractive,
+      },
+
+
+      #[derive(Serialize, Deserialize)]
+      pub struct LightSource {
+        pub geo: LightGeo,
+        pub emission: Vec3,
+        samples: Box<[Vec3]>,
+      }
+
+      impl LightSource {
+        pub fn new(geo: LightGeo, emission: Vec3, sample: u32) -> LightSource {
+          use std::time::{SystemTime, UNIX_EPOCH};
+          let mut samples = Vec::with_capacity(sample as usize);
+          let mut rng = XorShiftRng::new(SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as u32);
+          for _ in 0..sample {
+            match &geo {
+              LightGeo::Circle(circle) => {
+                let u = rng.gen().sqrt();
+                let v = 2.0 * PI * rng.gen();
+                samples.push(circle.plane.p + (circle.u * v.cos() + circle.v * v.sin()) * u);
+              }
+            }
+          }
+          LightSource { geo, emission, samples: samples.into() }
+        }
+
+        pub fn illuminate(&self, p: Vec3, norm: Vec3, block: &Vec<Object>) -> Vec3 {
+          let mut intensity = Vec3::zero();
+          'out: for &px in self.samples.as_ref() {
+            let len = (p - px).len();
+            let ray = Ray { o: px, d: (p - px) / len };
+            for obj in block {
+              if let Some(hit_result) = obj.geo.hit(&ray) {
+                if hit_result.t * 1.01 < len { // blocked
+                  continue 'out;
+                }
+              }
+            }
+            intensity += self.emission / (len * len) * norm.dot(ray.d).abs();
+          }
+          intensity / self.samples.len() as f32
+        }
+      }
+
+
+
+// ray tracing
+impl World {
+  pub fn ray_tracing(&self) -> PNG {
+    let (mut buf, cx, cy, start, progress) = self.prologue();
+    buf.par_iter_mut().enumerate().for_each(|(index, color)| {
+      let index = index as u32;
+      // index = (h-y-1)*w+x
+      let (x, y) = ((index % self.w) as f32, (self.h - 1 - index / self.w) as f32);
+      let mut rng = XorShiftRng::new(index);
+      let mut sum = Vec3(0.0, 0.0, 0.0);
+      for sx in 0..2 {
+        for sy in 0..2 {
+          let (r1, r2) = (2.0 * rng.gen(), 2.0 * rng.gen());
+          let dx = if r1 < 1.0 { r1.sqrt() - 1.0 } else { 1.0 - (2.0 - r1).sqrt() };
+          let dy = if r2 < 1.0 { r2.sqrt() - 1.0 } else { 1.0 - (2.0 - r2).sqrt() };
+          let d = cx * (((sx as f32 + 0.5 + dx) * 0.5 + x) / self.w as f32 - 0.5)
+            + cy * (((sy as f32 + 0.5 + dy) * 0.5 + y) / self.h as f32 - 0.5) + self.cam.d;
+          sum += self.ray_tracing_impl(Ray::new(self.cam.o + d * 14.0, d), 0);
+        }
+      }
+      *color = sum / 4.0 as f32;
+      let mut progress = progress.lock().unwrap();
+      progress.0 += 1;
+      if progress.0 % (self.w * self.h / 100) == 0 {
+        World::print_progress(progress.0 / (self.w * self.h / 100), start, &mut progress.1);
+      }
+    });
+    PNG::new(&buf, self.w, self.h)
+  }
+
+  fn hit_all(&self, ray: &Ray) -> Option<(HitResult, &Object)> {
+    let mut t = 1e9;
+    let mut ret = None;
+    for obj in &self.objs {
+      if let Some(result) = obj.geo.hit(ray) {
+        if result.t < t {
+          t = result.t;
+          ret = Some((result, obj));
+        }
+      }
+    }
+    ret
+  }
+
+  fn ray_tracing_impl(&self, ray: Ray, dep: u32) -> Vec3 {
+    if dep >= 5 { return self.env; }
+    if let Some(hit_result) = self.hit_all(&ray) {
+      let (HitResult { t, norm, uv }, obj) = hit_result;
+      let p = ray.o + ray.d * t;
+      let light = self.light.illuminate(p, norm, &self.objs);
+      let color = obj.color.to_vec3(uv);
+      match &obj.texture {
+        Texture::Diffuse => color.schur(light + self.env),
+        Texture::Specular => {
+          // reflect vector, also used in Refractive
+          // doesn't need to call Ray::new, because I can guarantee |d|=1
+          color.schur(light + self.ray_tracing_impl(Ray { o: p, d: ray.d - norm * 2.0 * norm.dot(ray.d) }, dep + 1))
+        }
+        Texture::Refractive => {
+          let ((reflect, reflect_i), refract) = Texture::refract(p, norm, ray);
+          color.schur(light
+            + self.ray_tracing_impl(reflect, dep + 1) * reflect_i
+            + refract.map_or(Vec3::zero(), |(refract, refract_i)| {
+            self.ray_tracing_impl(refract, dep + 1) * refract_i
+          }))
+        }
+        _ => unimplemented!()
+      }
+    } else { self.env }
+  }
+}
+
+      // Object {
+      //   geo: Geo::Mesh(load::mesh("tmp/dragon.obj", Mat44::shift(3.0, 0.0, 5.0) * Mat44::scale(3.0, 3.0, 3.0)).unwrap()),
+      //   color: Color::RGB(Vec3(1.0, 1.0, 1.0)),
+      //   texture: Texture::Refractive,
+      // },
+      // Object {
+      //   geo: Geo::Mesh(load::mesh("tmp/dragon.obj", Mat44::shift(7.0, 0.0, 10.0) * Mat44::scale(3.0, 3.0, 3.0)).unwrap()),
+      //   color: Color::RGB(Vec3(1.0, 1.0, 1.0)),
+      //   texture: Texture::Refractive,
+      // },'
+
+
+      Object {
+        geo: Geo::Mesh(load::mesh("tool/water.obj", Mat44::shift(0.0, 2.50, 0.0)).unwrap()),
+        color: Color::RGB(Vec3(0.999, 0.999, 0.999)),
+        texture: Texture::Refractive,
+      },
+      Object { // left
+        geo: Geo::Rectangle(Rectangle::new(Vec3(5.0, 0.0, 1.0), Vec3(0.0, 7.0, 0.0), Vec3(-0.5, 0.0, 1.0))),
+        color: Color::RGB(Vec3(1.0, 0.5, 1.0)),
+        texture: Texture::Specular,
+      },
+      Object { // right
+        geo: Geo::Rectangle(Rectangle::new(Vec3(6.0, 0.0, 1.5), Vec3(0.0, 7.0, 0.0), Vec3(-0.5, 0.0, 1.0))),
+        color: Color::RGB(Vec3(1.0, 0.5, 1.0)),
+        texture: Texture::Specular,
+      },
+      Object { // front
+        geo: Geo::Rectangle(Rectangle::new(Vec3(4.5, 0.0, 2.0), Vec3(0.0, 7.0, 0.0), Vec3(1.0, 0.0, 0.5))),
+        color: Color::RGB(Vec3(1.0, 0.5, 1.0)),
+        texture: Texture::Specular,
+      },
+      Object { // back
+        geo: Geo::Rectangle(Rectangle::new(Vec3(5.0, 0.0, 1.0), Vec3(0.0, 7.0, 0.0), Vec3(1.0, 0.0, 0.5))),
+        color: Color::RGB(Vec3(1.0, 0.5, 1.0)),
+        texture: Texture::Specular,
+      },
+      Object { // bottom
+        geo: Geo::Rectangle(Rectangle::new(Vec3(5.0, 0.0, 1.0), Vec3(-0.5, 0.0, 1.0), Vec3(1.0, 0.0, 0.5))),
+        color: Color::RGB(Vec3(1.0, 0.5, 1.0)),
+        texture: Texture::Specular,
+      },
+      Object { // top
+        geo: Geo::Rectangle(Rectangle::new(Vec3(5.0, 6.0, 1.0), Vec3(-0.5, 0.0, 1.0), Vec3(1.0, 0.0, 0.5))),
+        color: Color::RGB(Vec3(1.0, 0.5, 1.0)),
+        texture: Texture::Specular,
+      },
+
+        //  pub fn to_rotate_bezier(&self, sample_t: usize, sample_theta: usize, transform: Mat44) -> RotateBezier {
+      //    let transformed_ps = self.ps.iter().map(|v| (transform * v.extend(1.0)).to_vec3()).collect();
+      //    RotateBezier {
+      //      curve: BezierCurve::new(transformed_ps),
+      //      axis: Ray {
+      //        o: (transform * Vec4(0.0, 0.0, 0.0, 1.0)).to_vec3(),
+      //        d: (transform * Vec4(0.0, 1.0, 0.0, 0.0)).to_vec3().norm(),
+      //      },
+      //      mesh: Box::new(self.to_mesh(sample_t, sample_theta, transform)),
+      //    }
+      //  }
+
+              f32 u = res.col.x;
+              f32 v = res.col.y * (2 * PI);
+              f32 t = res.t;
+              f32 bx, by, dbx, dby;
+              Vec3 o{ray.o.x - SHIFT_X, ray.o.y, ray.o.z - SHIFT_Z};
+              Vec3 d = ray.d;
+              for (u32 _ = 0; _ < 5; ++_) {
+                EVAL_BEZIER(PS, u, bx, by);
+                EVAL_BEZIER(DER, u, dbx, dby);
+                f32 a00 = -bx * sinf(v), a01 = dbx * cosf(v) , a02 = -d.x, b0 = bx * cosf(v) - o.x - t * d.x;
+                f32 /* a10 = 0       ,*/ a11 = dby           , a12 = -d.y, b1 = by - o.y - t * d.y;
+                f32 a20 = -bx * cosf(v), a21 = -dbx * sinf(v), a22 = -d.z, b2 = -bx * sinf(v)- o.z - t * d.z;
+                {
+                  f32 fac = a20 / a00;
+                  a21 -= fac * a01, a22 -= fac * a02, b2 -= fac * b0;
+                }
+                {
+                  f32 fac = a21 / a11;
+                  a22 -= fac * a12, b2 -= fac * b1;
+                }
+                f32 x2 = b2 / a22;
+                f32 x1 = (b1 - x2 * a12) / a11;
+                f32 x0 = (b0 - x2 * a02 - x1 * a01) / a00;
+                u -= x1, v -= x0, t -= x2;
+              }
+              res.t = t;
+
+
+
+//          Vec2 tmp[sizeof(PS) / sizeof(Vec2)];
+//          memcpy(tmp, PS, sizeof(PS));
+//          for (u32 k = 1; k < sizeof(PS) / sizeof(Vec2); ++k) {
+//            for (u32 j = 0; j < sizeof(PS) / sizeof(Vec2) - k; ++j) {
+//              tmp[j] = tmp[j] * (1.0 - v) + tmp[j + 1] * v;
+//            }
+//          }
+//          bx = tmp[0].x, by = tmp[0].y;
+//          memcpy(tmp, DER, sizeof(DER));
+//          for (u32 k = 1; k < sizeof(DER) / sizeof(Vec2); ++k) {
+//            for (u32 j = 0; j < sizeof(DER) / sizeof(Vec2) - k; ++j) {
+//              tmp[j] = tmp[j] * (1.0 - v) + tmp[j + 1] * v;
+//            }
+//          }
+//          dbx = tmp[0].x, dby = tmp[0].y;
+
+
+//    self.mesh.hit(ray).map(|res| {
+//      use std::f32::consts::PI;
+//      let (mut t, mut u, mut v, mut norm) = (res.t, res.uv.0 * 2.0 * PI, res.uv.1, res.norm);
+//      for _ in 0..1 {
+//        let (sin, cos) = u.sin_cos();
+//        let (point, tangent_t) = (self.curve.value(v) - self.axis.o, self.curve.tangent(v));
+//        let (cast_p, cast_t) = (self.axis.d * self.axis.d.dot(point), self.axis.d * self.axis.d.dot(tangent_t));
+//        let (x_p, x_t) = (point - cast_p, tangent_t - cast_t);
+//        let (y_p, y_t) = (self.axis.d.cross(x_p), self.axis.d.cross(x_t));
+//        let point = self.axis.o + cast_p + x_p * cos + y_p * sin;
+//        let diff = ray.o + ray.d * t - point;
+//        if diff.len2() < EPS * EPS {
+//          break;
+//        }
+//        let tangent_t = cast_t + x_t * cos + y_t * sin;
+//        let tangent_theta = x_t * -sin + y_t * cos;
+//        norm = tangent_theta.cross(tangent_t);
+//        let d = ray.d.dot(norm);
+////        println!("t={} u={} v={} norm={:?} point={:?} err={:?}", t, u, v, norm, point, diff.len2());
+//        t -= tangent_theta.dot(tangent_t.cross(diff)) / d;
+//        u -= ray.d.dot(tangent_t.cross(diff)) / d;
+//        v += ray.d.dot(tangent_theta.cross(diff)) / d;
+//      }
+////      std::process::exit(0)
+//      HitResult { t, norm, uv: Vec2(u / (2.0 * PI), v) }
+//    })
+//  }
+'
+
+  let world = World {
+    objs: vec![
+//      Object { // left
+//        geo: Geo::InfPlane(InfPlane::new(Vec3(0.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0))),
+//        color: Color::RGB(Vec3(0.75, 0.25, 0.25)),
+//        texture: Texture::Diffuse,
+//      },
+      Object { // right
+        geo: Geo::InfPlane(InfPlane::new(Vec3(10.0, 0.0, 0.0), Vec3(1.0, 0.0, 0.0))),
+        color: Color::RGB(Vec3(0.25, 0.25, 0.75)),
+        texture: Texture::Diffuse,
+      },
+      Object { // back
+        geo: Geo::InfPlane(InfPlane::new(Vec3(0.0, 0.0, 0.0), Vec3(0.0, 0.0, 1.0))),
+        color: Color::RGB(Vec3(0.75, 0.75, 0.75)),
+        texture: Texture::Diffuse,
+      },
+//      Object { // front
+//        geo: Geo::InfPlane(InfPlane::new(Vec3(0.0, 0.0, 20.0), Vec3(0.0, 0.0, 1.0))),
+//        color: Color::RGB(Vec3(0.75, 0.75, 0.75)),
+//        texture: Texture::Diffuse,
+//      },
+      Object { // bottom
+        geo: Geo::InfPlane(InfPlane::new(Vec3(0.0, 0.0, 0.0), Vec3(0.0, 1.0, 0.0))),
+        color: Color::RGB(Vec3(0.75, 0.75, 0.75)),
+        texture: Texture::Diffuse,
+      },
+//      Object { // top
+//        geo: Geo::InfPlane(InfPlane::new(Vec3(0.0, 8.50, 0.0), Vec3(0.0, 1.0, 0.0))),
+//        color: Color::RGB(Vec3(0.75, 0.75, 0.75)),
+//        texture: Texture::Diffuse,
+//      },
+      Object {
+        geo: Geo::Sphere(Sphere { c: Vec3(2.70, 1.65, 4.70), r: 1.65 }),
+        color: Color::RGB(Vec3(0.999, 0.999, 0.999)),
+        texture: Texture::Specular,
+      },
+      Object {
+        geo: Geo::Sphere(Sphere { c: Vec3(7.30, 1.65, 7.8), r: 1.65 }),
+        color: Color::RGB(Vec3(0.999, 0.999, 0.999)),
+        texture: Texture::Refractive,
+      },
+    ],
+    light: LightSource {
+      geo: LightGeo::Circle(Circle::new(Vec3(5.0, 8.5 - 0.02, 5.0), Vec3(0.0, 1.0, 0.0), 1.75)),
+      emission: Vec3(15.0, 15.0, 15.0),
+    },
+    env: Vec3::zero(),
+    cam: Ray::new(Vec3(5.0, 5.2, 29.56), Vec3(0.0, -0.042612, -1.0)),
+    w: 1024,
+    h: 1024,
+  };
+//  CodegenBase::new(PPMCodeGen::new(Vec3(0.0, 0.0, 0.0), Vec3(10.0, 8.5, 20.0))).gen(&world, "ppm_tracer_test.cpp");
+//  CodegenBase::new(CppCodegen).gen(&world, "ray_tracer.cpp");
+  CodegenBase::new(CudaCodegen::new()).gen(&world, "ray_tracer.cu");'
+
+
+
+
+  let world = World {
+      objs: vec![
+        Object { // left
+          geo: Geo::Rectangle(Rectangle::new(Vec3(-20.0, 0.0, 0.0), Vec3(0.0, 0.0, 40.0), Vec3(0.0, 17.0, 0.0))),
+          color: Color::RGB(Vec3(0.75, 0.75, 0.75)),
+          texture: Texture::Diffuse,
+        },
+        Object { // right
+          geo: Geo::Rectangle(Rectangle::new(Vec3(10.0, 0.0, 0.0), Vec3(0.0, 0.0, 40.0), Vec3(0.0, 17.0, 0.0))),
+          color: load::texture("tmp/forest_grid.png", false).unwrap(),
+  //        color: Color::RGB(Vec3(0.75, 0.75, 0.75)),
+          texture: Texture::Diffuse,
+        },
+        Object { // back
+          geo: Geo::Rectangle(Rectangle::new(Vec3(-20.0, 0.0, 0.0), Vec3(30.0, 0.0, 0.0), Vec3(0.0, 17.0, 0.0))),
+          color: load::texture("tmp/forest.png", true).unwrap(),
+  //        color: Color::RGB(Vec3(0.75, 0.75, 0.75)),
+          texture: Texture::Diffuse,
+        },
+        Object { // front
+          geo: Geo::Rectangle(Rectangle::new(Vec3(-20.0, 0.0, 40.0), Vec3(30.0, 0.0, 0.0), Vec3(0.0, 17.0, 0.0))),
+          color: Color::RGB(Vec3(0.75, 0.75, 0.75)),
+          texture: Texture::Diffuse,
+        },
+        Object { // bottom
+          geo: Geo::InfPlane(InfPlane::new(Vec3(-20.0, 0.0, 0.0), Vec3(0.0, 1.0, 0.0))),
+  //        geo: Geo::Rectangle(Rectangle::new(Vec3(-20.0, 0.0, 0.0), Vec3(30.0, 0.0, 0.0), Vec3(0.0, 0.0, 40.0))),
+          color: load::texture("tmp/bauhinia_b.png", true).unwrap(),
+  //        color: Color::RGB(Vec3(0.75, 0.75, 0.75)),
+          texture: Texture::Diffuse,
+        },
+        Object { // top
+          geo: Geo::InfPlane(InfPlane::new(Vec3(0.0, 17.0, 0.0), Vec3(0.0, 1.0, 0.0))),
+          color: Color::RGB(Vec3(0.75, 0.75, 0.75)),
+          texture: Texture::Diffuse,
+        },
+  //      Object {
+  //        geo: Geo::Mesh(load::bezier_curve("result/water_drop.txt").unwrap().to_mesh(100, 100,
+  //                                                                                    Mat44::shift(-4.0, 1.85, 12.0) * Mat44::scale(9.0, 9.0, 9.0) * Mat44::rot_z_deg(90.0))),
+  //        color: Color::RGB(Vec3(1.0, 1.0, 1.0)),
+  //        texture: Texture::Refractive,
+  //      },
+        Object {
+          geo: Geo::Mesh(load::mesh("tmp/dragon.obj", Mat44::shift(-8.0, 0.0, 12.0) * Mat44::scale(4.8, 4.8, 4.8)).unwrap()),
+          color: Color::RGB(Vec3(1.0, 1.0, 1.0)),
+          texture: Texture::Refractive,
+        },
+        Object {
+          geo: Geo::RotateBezier(load::bezier_curve("tmp/vase.txt").unwrap().rotate_bezier(100, 100,
+                                                                                           Vec3(7.5, 1.6, 2.5), 2.5)),
+          color: load::texture("./tmp/vase.png", false).unwrap(),
+          texture: Texture::Mixed { d_prob: 0.8, s_prob: 0.2 },
+        },
+        Object {
+          geo: Geo::Rectangle(Rectangle::new(Vec3(10.0, 1.6, 0.0), Vec3(-6.0, 0.0, 0.0), Vec3(0.0, 0.0, 6.0))),
+          color: load::texture("./tmp/wood.png", false).unwrap(),
+          texture: Texture::Diffuse,
+        },
+        Object {
+          geo: Geo::Rectangle(Rectangle::new(Vec3(4.0, 1.6, 0.0), Vec3(0.0, -0.4, 0.0), Vec3(0.0, 0.0, 6.0))),
+          color: load::texture("./tmp/wood.png", false).unwrap(),
+          texture: Texture::Diffuse,
+        },
+        Object {
+          geo: Geo::Rectangle(Rectangle::new(Vec3(10.0, 1.6, 6.0), Vec3(-6.0, 0.0, 0.0), Vec3(0.0, -0.4, 0.0))),
+          color: load::texture("./tmp/wood.png", false).unwrap(),
+          texture: Texture::Diffuse,
+        },
+  //      Object {
+  //        geo: Geo::Mesh(load::mesh("tmp/dragon.obj",
+  //                                  Mat44::shift(7.0, 0.0, 12.0) * Mat44::scale(4.5, 4.5, 4.5) * Mat44::rot_y_deg(-90.0)).unwrap()),
+  //        color: Color::RGB(Vec3(1.0, 1.0, 1.0)),
+  //        texture: Texture::Specular,
+  //      },
+      ],
+      light: LightSource {
+        geo: LightGeo::Circle(Circle::new(Vec3(0.0, 17.0 - 0.1, 8.0), Vec3(0.0, 1.0, 0.0), 10.0)),
+        emission: Vec3(4.0, 4.0, 4.0),
+      },
+      cam: Ray::new(Vec3(-5.5, 5.0, 40.0), Vec3(0.2, 0.02, -1.0)),
+      env: Vec3::zero(),
+      w: 1920 / 2,
+      h: 1080 / 2,
+    };
+
+
+Object {
+        geo: Geo::Mesh(load::mesh("tool/water.obj", Mat44::shift(0.0, 2.50, 0.0)).unwrap()),
+        color: Color::RGB(Vec3(0.999, 0.999, 0.999)),
+        texture: Texture::Refractive,
+      },
+      Object {
+        geo: Geo::Mesh(load::mesh("tmp/Heart.obj", Mat44::shift(7.8, 0.0, 8.0) *
+          Mat44::rot_x_deg(-30.0) * Mat44::rot_z_deg(30.0) * Mat44::rot_y_deg(45.0) * Mat44::scale(0.12, 0.12, 0.12)).unwrap()),
+        color: Color::RGB(Vec3(0.999, 0.5, 0.5)),
+        texture: Texture::Refractive,
+      },
+      Object {
+        geo: Geo::Mesh(load::mesh("tmp/ring.obj", Mat44::shift(2.0, 0.3, 7.0) *
+          Mat44::rot_x_deg(90.0) * Mat44::rot_z_deg(-45.0) * Mat44::scale(1.3, 1.3, 1.3)).unwrap()),
+        color: Color::RGB(Vec3(0.999, 0.999, 0.999)),
+        texture: Texture::Specular,
+      },
