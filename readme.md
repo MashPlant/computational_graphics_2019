@@ -41,6 +41,8 @@ GPU并行加速(5')（**OpenMP不算**）
 
 ### result
 
+一个视频demo：[https://www.youtube.com/shorts/LVH_wZV6U6E](https://www.youtube.com/shorts/LVH_wZV6U6E).
+
 放几个jpg的图像，小不少，为大家节约流量
 
 ![](./ray_tracer/readme_pic/finalr.jpg)
